@@ -1,20 +1,9 @@
 # Toy-KV
 
-api:
+A single node kv server using key-value separations strategy instead of LSM-based technology.
 
-get
-put
-delete
-scan -> Iterator
+## Features
 
-
-.db file
-version (4 bytes), keys_len(4 bytes), keys_data(VAR), value_len(4 bytes), value_data(VAR)
-
-.pos file
-
-/engine/store
-/engine/db
-/engine/
-
-/transport/
+- SSD Friendly
+- Data Persistence
+- Easy to Integrate (you can change the transport layer easily)

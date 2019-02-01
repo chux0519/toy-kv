@@ -4,4 +4,12 @@ version = "0.1.0"
 authors = ["chux0519 <chuxdesign@hotmail.com>"]
 edition = "2018"
 
+[[example]]
+name = "client"
+path = "example/client.rs"
+
+[[example]]
+name = "server"
+path = "example/server.rs"
+
 [dependencies]
