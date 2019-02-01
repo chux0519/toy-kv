@@ -25,6 +25,6 @@ impl PartialEq for Key {
 }
 
 pub enum Value {
-    Value(ValueRaw),
+    Valid(ValueRaw),
     Invalid,
 }

@@ -33,7 +33,7 @@ impl<'a> Iterator for StoreIter<'a> {
             let key = &self.store.index[self.index];
             let ventry = key.ventry;
             self.index += 1;
-            if let Value::Value(value) = self.store.values[ventry] {
+            if let Value::Valid(value) = self.store.values[ventry] {
                 return Some((key.key, value));
             }
         }
@@ -59,7 +59,7 @@ impl Store {
                     let v = &self.values[k.ventry];
                     match v {
                         Value::Invalid => return None,
-                        Value::Value(val) => return Some(val),
+                        Value::Valid(val) => return Some(val),
                     }
                 }
             }
