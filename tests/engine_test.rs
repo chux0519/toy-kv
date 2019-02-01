@@ -1,17 +1,17 @@
 #[cfg(test)]
 mod tests {
-    use toy_kv::engine;
+    use toy_kv::engine::{kv, store};
 
     #[test]
     fn store_put_get() {
-        let mut db = engine::Store::new();
+        let mut db = store::Store::new();
         let pairs = vec![
-            ([0; 8], engine::Value::Value([0; 256])),
-            ([2; 8], engine::Value::Value([2; 256])),
-            ([1; 8], engine::Value::Value([1; 256])),
-            ([3; 8], engine::Value::Value([3; 256])),
-            ([5; 8], engine::Value::Value([5; 256])),
-            ([4; 8], engine::Value::Value([4; 256])),
+            ([0; 8], kv::Value::Value([0; 256])),
+            ([2; 8], kv::Value::Value([2; 256])),
+            ([1; 8], kv::Value::Value([1; 256])),
+            ([3; 8], kv::Value::Value([3; 256])),
+            ([5; 8], kv::Value::Value([5; 256])),
+            ([4; 8], kv::Value::Value([4; 256])),
         ];
         for pair in pairs {
             db.put(pair.0, pair.1).unwrap();
@@ -24,14 +24,14 @@ mod tests {
 
     #[test]
     fn store_delete() {
-        let mut db = engine::Store::new();
+        let mut db = store::Store::new();
         let pairs = vec![
-            ([0; 8], engine::Value::Value([0; 256])),
-            ([2; 8], engine::Value::Value([2; 256])),
-            ([1; 8], engine::Value::Value([1; 256])),
-            ([3; 8], engine::Value::Value([3; 256])),
-            ([5; 8], engine::Value::Value([5; 256])),
-            ([4; 8], engine::Value::Value([4; 256])),
+            ([0; 8], kv::Value::Value([0; 256])),
+            ([2; 8], kv::Value::Value([2; 256])),
+            ([1; 8], kv::Value::Value([1; 256])),
+            ([3; 8], kv::Value::Value([3; 256])),
+            ([5; 8], kv::Value::Value([5; 256])),
+            ([4; 8], kv::Value::Value([4; 256])),
         ];
         for pair in pairs {
             db.put(pair.0, pair.1).unwrap();
@@ -47,14 +47,14 @@ mod tests {
 
     #[test]
     fn store_scan() {
-        let mut db = engine::Store::new();
+        let mut db = store::Store::new();
         let pairs = vec![
-            ([0; 8], engine::Value::Value([0; 256])),
-            ([2; 8], engine::Value::Value([2; 256])),
-            ([1; 8], engine::Value::Value([1; 256])),
-            ([3; 8], engine::Value::Value([3; 256])),
-            ([5; 8], engine::Value::Value([5; 256])),
-            ([4; 8], engine::Value::Value([4; 256])),
+            ([0; 8], kv::Value::Value([0; 256])),
+            ([2; 8], kv::Value::Value([2; 256])),
+            ([1; 8], kv::Value::Value([1; 256])),
+            ([3; 8], kv::Value::Value([3; 256])),
+            ([5; 8], kv::Value::Value([5; 256])),
+            ([4; 8], kv::Value::Value([4; 256])),
         ];
         for pair in pairs {
             db.put(pair.0, pair.1).unwrap();
