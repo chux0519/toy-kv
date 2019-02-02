@@ -50,8 +50,8 @@ impl Store {
         }
     }
 
-    pub fn get(&self, key: &InnerKey) -> Option<&InnerValue> {
-        match bsearch(&self.index, key) {
+    pub fn get(&self, key: InnerKey) -> Option<InnerValue> {
+        match bsearch(&self.index, &key) {
             None => return None,
             Some(pos) => {
                 let k = &self.index[pos];
@@ -59,7 +59,7 @@ impl Store {
                     let v = &self.values[k.ventry];
                     match v {
                         Value::Invalid => return None,
-                        Value::Valid(val) => return Some(val),
+                        Value::Valid(val) => return Some(val.clone()),
                     }
                 }
             }

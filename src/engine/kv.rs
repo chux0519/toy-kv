@@ -22,13 +22,25 @@ pub struct InnerValue {
 
 impl ToString for InnerKey {
     fn to_string(&self) -> String {
-        self.raw.iter().cloned().map(|x| x as char).collect()
+        self.raw
+            .iter()
+            .cloned()
+            .map(|x| x as char)
+            .collect::<String>()
+            .trim_matches(char::from(0))
+            .to_owned()
     }
 }
 
 impl ToString for InnerValue {
     fn to_string(&self) -> String {
-        self.raw.iter().cloned().map(|x| x as char).collect()
+        self.raw
+            .iter()
+            .cloned()
+            .map(|x| x as char)
+            .collect::<String>()
+            .trim_matches(char::from(0))
+            .to_owned()
     }
 }
 
