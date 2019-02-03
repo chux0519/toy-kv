@@ -5,10 +5,9 @@ use std::io;
 use std::sync::RwLock;
 
 /// Seperating keys and values
-/// `keys` and `values` are both insert only vector
+/// `values` is an insert only vector
 /// `index` for ordering the keys in the store
 pub struct Store {
-    keys: RwLock<Vec<Key>>,
     values: RwLock<Vec<Value>>,
     index: RwLock<Vec<Key>>,
 }
@@ -46,7 +45,6 @@ impl<'a> Iterator for StoreIter<'a> {
 impl Store {
     pub fn new() -> Self {
         Store {
-            keys: RwLock::new(Vec::new()),
             values: RwLock::new(Vec::new()),
             index: RwLock::new(Vec::new()),
         }
@@ -73,13 +71,8 @@ impl Store {
 
     pub fn put(&mut self, key: InnerKey, value: Value) -> Result<(), io::Error> {
         let mut windex = self.index.write().unwrap();
-        let mut wkeys = self.keys.write().unwrap();
         let mut wvalues = self.values.write().unwrap();
         let ventry = wvalues.len();
-        wkeys.push(Key {
-            inner: key.clone(),
-            ventry,
-        });
         wvalues.push(value);
         // update index
         let (found, pos) = find_insert_point(&windex, &key);
