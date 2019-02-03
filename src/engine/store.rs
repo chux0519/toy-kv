@@ -2,14 +2,15 @@ use super::kv::*;
 use super::util::*;
 
 use std::io;
+use std::sync::RwLock;
 
 /// Seperating keys and values
 /// `keys` and `values` are both insert only vector
 /// `index` for ordering the keys in the store
 pub struct Store {
-    keys: Vec<Key>,
-    values: Vec<Value>,
-    index: Vec<Key>,
+    keys: RwLock<Vec<Key>>,
+    values: RwLock<Vec<Value>>,
+    index: RwLock<Vec<Key>>,
 }
 
 /// For iteraing the store
@@ -28,12 +29,13 @@ impl<'a> Iterator for StoreIter<'a> {
     type Item = (InnerKey, InnerValue);
 
     fn next(&mut self) -> Option<Self::Item> {
-        dbg!(self.index);
-        if self.index < self.store.index.len() {
-            let key = &self.store.index[self.index];
+        let rindex = self.store.index.read().unwrap();
+        let rvalues = self.store.values.read().unwrap();
+        if self.index < rindex.len() {
+            let key = &rindex[self.index];
             let ventry = key.ventry;
             self.index += 1;
-            if let Value::Valid(inner_value) = &self.store.values[ventry] {
+            if let Value::Valid(inner_value) = &rvalues[ventry] {
                 return Some((key.inner.clone(), inner_value.clone()));
             }
         }
@@ -44,19 +46,21 @@ impl<'a> Iterator for StoreIter<'a> {
 impl Store {
     pub fn new() -> Self {
         Store {
-            keys: Vec::new(),
-            values: Vec::new(),
-            index: Vec::new(),
+            keys: RwLock::new(Vec::new()),
+            values: RwLock::new(Vec::new()),
+            index: RwLock::new(Vec::new()),
         }
     }
 
     pub fn get(&self, key: InnerKey) -> Option<InnerValue> {
-        match bsearch(&self.index, &key) {
+        let rindex = self.index.read().unwrap();
+        let rvalues = self.values.read().unwrap();
+        match bsearch(&*rindex, &key) {
             None => return None,
             Some(pos) => {
-                let k = &self.index[pos];
-                if k.ventry < self.values.len() {
-                    let v = &self.values[k.ventry];
+                let k = &rindex[pos];
+                if k.ventry < rvalues.len() {
+                    let v = &rvalues[k.ventry];
                     match v {
                         Value::Invalid => return None,
                         Value::Valid(val) => return Some(val.clone()),
@@ -68,27 +72,29 @@ impl Store {
     }
 
     pub fn put(&mut self, key: InnerKey, value: Value) -> Result<(), io::Error> {
-        // TODO: insert thread safelly
-        let ventry = self.values.len();
-        self.keys.push(Key {
+        let mut windex = self.index.write().unwrap();
+        let mut wkeys = self.keys.write().unwrap();
+        let mut wvalues = self.values.write().unwrap();
+        let ventry = wvalues.len();
+        wkeys.push(Key {
             inner: key.clone(),
             ventry,
         });
-        self.values.push(value);
+        wvalues.push(value);
         // update index
-        let (found, pos) = find_insert_point(&self.index, &key);
+        let (found, pos) = find_insert_point(&windex, &key);
         if found {
-            self.index[pos].ventry = ventry;
+            windex[pos].ventry = ventry;
         } else {
             // dbg!(&pos);
             // dbg!(&self.index.len());
-            if pos == self.index.len() {
-                self.index.push(Key {
+            if pos == windex.len() {
+                windex.push(Key {
                     inner: key.clone(),
                     ventry,
                 });
             } else {
-                self.index.insert(
+                windex.insert(
                     pos,
                     Key {
                         inner: key.clone(),
@@ -97,7 +103,6 @@ impl Store {
                 );
             }
         }
-        dbg!(&self.index);
         Ok(())
     }
 
