@@ -86,8 +86,6 @@ impl Store {
         if found {
             windex[pos].ventry = ventry;
         } else {
-            // dbg!(&pos);
-            // dbg!(&self.index.len());
             if pos == windex.len() {
                 windex.push(Key {
                     inner: key.clone(),

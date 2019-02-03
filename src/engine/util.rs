@@ -7,9 +7,8 @@ pub fn bsearch(index: &Vec<Key>, key: &InnerKey) -> Option<usize> {
     }
     let mut left = 0;
     let mut right = index.len();
-    let mut mid = left + (right - left) / 2;
     while left <= right {
-        mid = left + (right - left) / 2;
+        let mid = left + (right - left) / 2;
         if &index[mid].inner < key {
             left = mid + 1;
         } else if &index[mid].inner > key {
