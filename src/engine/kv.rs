@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
-use std::error;
-use std::fmt;
 use std::str::FromStr;
 use std::string::ToString;
+
+use super::error::Error;
 
 /// Keys are only allowed in 8 bytes
 /// While Values for 256 bytes each
@@ -45,11 +45,11 @@ impl ToString for InnerValue {
 }
 
 impl FromStr for InnerKey {
-    type Err = LongContentError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.len() > 8 {
-            return Err(LongContentError);
+            return Err(Error::ContentTooLong);
         }
         let mut key = [0; 8];
         let chars = s.as_bytes();
@@ -61,11 +61,11 @@ impl FromStr for InnerKey {
 }
 
 impl FromStr for InnerValue {
-    type Err = LongContentError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.len() > 256 {
-            return Err(LongContentError);
+            return Err(Error::ContentTooLong);
         }
         let mut value = [0; 256];
         let chars = s.as_bytes();
@@ -73,25 +73,6 @@ impl FromStr for InnerValue {
             value[i] = chars[i];
         }
         Ok(InnerValue { raw: value })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct LongContentError;
-
-impl fmt::Display for LongContentError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "content too long")
-    }
-}
-
-impl error::Error for LongContentError {
-    fn description(&self) -> &str {
-        "content too long"
-    }
-
-    fn cause(&self) -> Option<&error::Error> {
-        None
     }
 }
 
