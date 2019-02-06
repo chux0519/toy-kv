@@ -1,6 +1,7 @@
 use std::fmt::{self, Debug, Display};
 use std::io;
 
+#[derive(PartialEq)]
 pub enum Error {
     // For str to key
     ContentExceed,
