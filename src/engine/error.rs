@@ -2,15 +2,23 @@ use std::fmt::{self, Debug, Display};
 use std::io;
 
 pub enum Error {
-    ContentTooLong,
-    IndexFileBroken,
+    // For str to key
+    ContentExceed,
+    // For init
+    WrongAlignment,
+    // For reading values
+    OutOfIndex,
+    // For build value from [u8]
+    InvalidValueSize,
 }
 
 impl Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::ContentTooLong => write!(f, "Content too long"),
-            Error::IndexFileBroken => write!(f, "Index File Broken"),
+            Error::ContentExceed => write!(f, "Content too long"),
+            Error::WrongAlignment => write!(f, "Alignment error"),
+            Error::OutOfIndex => write!(f, "Read out of index"),
+            Error::InvalidValueSize => write!(f, "Invalid value size"),
         }
     }
 }
@@ -18,8 +26,10 @@ impl Debug for Error {
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::ContentTooLong => write!(f, "Content too long"),
-            Error::IndexFileBroken => write!(f, "Index File Broken"),
+            Error::ContentExceed => write!(f, "Content too long"),
+            Error::WrongAlignment => write!(f, "Alignment error"),
+            Error::OutOfIndex => write!(f, "Read out of index"),
+            Error::InvalidValueSize => write!(f, "Invalid value size"),
         }
     }
 }
@@ -27,8 +37,10 @@ impl Display for Error {
 impl From<Error> for io::Error {
     fn from(e: Error) -> io::Error {
         match e {
-            Error::ContentTooLong => io::Error::new(io::ErrorKind::Other, "Content too long"),
-            Error::IndexFileBroken => io::Error::new(io::ErrorKind::Other, "Index File Broken"),
+            Error::ContentExceed => io::Error::new(io::ErrorKind::Other, "Content too long"),
+            Error::WrongAlignment => io::Error::new(io::ErrorKind::Other, "Alignment error"),
+            Error::OutOfIndex => io::Error::new(io::ErrorKind::Other, "Read out of index"),
+            Error::InvalidValueSize => io::Error::new(io::ErrorKind::Other, "Invalid value size"),
         }
     }
 }
