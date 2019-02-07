@@ -127,7 +127,7 @@ pub fn key_to_bytes(key: &Key) -> Vec<u8> {
     bytes[KEY_SIZE] = (ventry >> 24) as u8;
     bytes[KEY_SIZE + 1] = (ventry >> 16) as u8;
     bytes[KEY_SIZE + 2] = (ventry >> 8) as u8;
-    bytes[KEY_SIZE + 2] = ventry as u8;
+    bytes[KEY_SIZE + 3] = ventry as u8;
 
     bytes
 }

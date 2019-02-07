@@ -12,40 +12,40 @@ mod store_integration_test {
         path
     }
 
-    // #[test]
-    // fn store_put_get() {
-    //     let tmpfile = tmpfile("test");
-    //     {
-    //         let mut db = store::Store::new(&tmpfile).unwrap();
-    //         let kvs = vec![
-    //             ("key00", "value00"),
-    //             ("key02", "value02"),
-    //             ("key01", "value01"),
-    //             ("key03", "value03"),
-    //             ("key05", "value05"),
-    //             ("key04", "value04"),
-    //         ];
-    //         for kv in kvs {
-    //             db.put(
-    //                 kv.0.parse().unwrap(),
-    //                 kv::Value::Valid(kv.1.parse().unwrap()),
-    //             )
-    //             .unwrap();
-    //         }
-    //     }
-    //     {
-    //         // Restore from file
-    //         let db = store::Store::new(&tmpfile).unwrap();
+    #[test]
+    fn store_put_get() {
+        let tmpfile = tmpfile("test");
+        {
+            let mut db = store::Store::new(&tmpfile).unwrap();
+            let kvs = vec![
+                ("key00", "value00"),
+                ("key02", "value02"),
+                ("key01", "value01"),
+                ("key03", "value03"),
+                ("key05", "value05"),
+                ("key04", "value04"),
+            ];
+            for kv in kvs {
+                db.put(
+                    kv.0.parse().unwrap(),
+                    kv::Value::Valid(kv.1.parse().unwrap()),
+                )
+                .unwrap();
+            }
+        }
+        {
+            // Restore from file
+            let db = store::Store::new(&tmpfile).unwrap();
 
-    //         for i in 0..=5 {
-    //             let v = db
-    //                 .get(format!("key0{}", i).parse().unwrap())
-    //                 .unwrap()
-    //                 .unwrap();
-    //             assert_eq!(v.to_string(), format!("value0{}", i))
-    //         }
-    //     }
-    // }
+            for i in 0..=5 {
+                let v = db
+                    .get(format!("key0{}", i).parse().unwrap())
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(v.to_string(), format!("value0{}", i))
+            }
+        }
+    }
 
     #[test]
     fn store_delete() {
