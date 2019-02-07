@@ -2,7 +2,7 @@ use super::error::*;
 use super::kv::*;
 
 use memmap::{MmapMut, MmapOptions};
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
@@ -86,12 +86,11 @@ pub fn find_insert_point(index: &Vec<Key>, key: &InnerKey) -> (bool, usize) {
     (false, mid)
 }
 
-/// Get RawFd with rw and create permission
+/// Get File with rw permission
 pub fn get_rw_fd<P: AsRef<Path>>(file: P) -> File {
     OpenOptions::new()
         .read(true)
         .write(true)
-        .create(true)
         .open(&file)
         .expect(&format!("failed to open file: {:?}", file.as_ref()))
 }
@@ -99,9 +98,6 @@ pub fn get_rw_fd<P: AsRef<Path>>(file: P) -> File {
 /// Get the mutable memmap handle
 pub fn get_rw_mmap_fd<P: AsRef<Path>>(file: P, size: usize, offset: u64) -> MmapMut {
     let fd = get_rw_fd(file.as_ref());
-    // FIXME:
-    fd.set_len((KEY_FILE_SIZE + BUFFER_SIZE + VALUE_FILE_SIZE) as u64)
-        .unwrap();
     unsafe {
         MmapOptions::new()
             .len(size)
@@ -182,6 +178,60 @@ pub fn get_buffer_pos(buffer: &[u8]) -> Result<usize, Error> {
         pos += VALUE_SIZE;
     }
     Ok(pos)
+}
+
+pub fn ensure_size<P: AsRef<Path>>(path: P) -> Result<usize, Error> {
+    let metadata = fs::metadata(&path);
+    match metadata {
+        Err(_) => {
+            // Create
+            File::create(&path)?;
+            return ensure_size(path);
+        }
+        Ok(meta) => {
+            let len = meta.len();
+            let f = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(&path)?;
+            if len == 0 {
+                f.set_len((BUFFER_SIZE + KEY_FILE_SIZE + VALUE_FILE_SIZE) as u64)?;
+                return Ok(BUFFER_SIZE + KEY_FILE_SIZE);
+            } else {
+                // Read last VALUE_SIZE
+                let mut reader = BufReader::new(&f);
+                reader.seek(SeekFrom::End(-(VALUE_SIZE as i64)))?;
+                let mut buf = [0; VALUE_SIZE];
+                reader.read_exact(&mut buf)?;
+                if buf[..] != [0; VALUE_SIZE][..] {
+                    // Full
+                    f.set_len(len + (KEY_FILE_SIZE + VALUE_FILE_SIZE) as u64)?;
+                    return Ok(len as usize + KEY_FILE_SIZE);
+                }
+                let pos = find_value_pos(&mut reader, len)?;
+                return Ok(pos);
+            }
+        }
+    }
+}
+
+fn find_value_pos<R: Read + Seek>(reader: &mut R, len: u64) -> Result<usize, Error> {
+    let pos = len - VALUE_FILE_SIZE as u64;
+    reader.seek(SeekFrom::Start(pos))?;
+
+    for x in (pos..len).step_by(VALUE_SIZE) {
+        let mut buf = [0; BUFFER_SIZE];
+        reader.read_exact(&mut buf)?;
+        // BUFFER_SIZE(4kb) is 16 times of VALUE_SIZE(256byte)
+        for i in (0..BUFFER_SIZE).step_by(VALUE_SIZE) {
+            let chunk = &buf[i..i + VALUE_SIZE];
+            if chunk[..] == [0; VALUE_SIZE][..] {
+                return Ok(x as usize + i);
+            }
+        }
+    }
+    unreachable!();
 }
 
 #[cfg(test)]

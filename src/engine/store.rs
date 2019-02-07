@@ -3,7 +3,6 @@ use super::error;
 use super::kv::*;
 use super::util::{self, *};
 
-use std::io;
 use std::path::Path;
 use std::sync::RwLock;
 
@@ -50,20 +49,22 @@ impl<'a> Iterator for StoreIter<'a> {
 }
 
 impl Store {
-    pub fn new<P: AsRef<Path>>(db_file: P) -> Self {
-        // TODO: Ensure size
+    pub fn new<P: AsRef<Path>>(db_file: P) -> Result<Self, error::Error> {
+        let file_pos = util::ensure_size(&db_file)?;
+        dbg!(file_pos);
 
         // Init buffer(mmap)
         let mmap_buffer = get_rw_mmap_fd(&db_file, BUFFER_SIZE, 0);
-        let buf_pos = util::get_buffer_pos(&mmap_buffer).unwrap();
+        let buf_pos = util::get_buffer_pos(&mmap_buffer)?;
+        dbg!(buf_pos);
 
         // Get values(dio) handle
         let direct_file =
-            DirectFile::open(&db_file, Mode::Append, FileAccess::ReadWrite, BUFFER_SIZE).unwrap();
+            DirectFile::open(&db_file, Mode::Append, FileAccess::ReadWrite, BUFFER_SIZE)?;
         let end_pos = direct_file.end_pos();
 
         // Build index
-        let index = build_index(&db_file, BUFFER_SIZE, end_pos).unwrap();
+        let index = build_index(&db_file, BUFFER_SIZE, end_pos)?;
         let ventry = index.len() % MAX_KV_PAIR;
 
         // Init keys(mmap)
@@ -75,28 +76,26 @@ impl Store {
 
         let km = KeyManager::new(mmap_key, index, ventry);
 
-        let file_pos = 0;
-        // let file_pos = util::get_file_pos(&direct_file);
         let vm = ValueManager::new(mmap_buffer, buf_pos, direct_file, file_pos);
 
-        Store { km, vm }
+        Ok(Store { km, vm })
     }
 
-    pub fn get(&self, key: InnerKey) -> Option<InnerValue> {
+    pub fn get(&self, key: InnerKey) -> Result<Option<InnerValue>, error::Error> {
         let key = self.km.find(&key);
         dbg!(&key);
         match key {
-            None => return None,
-            Some(k) => match self.vm.read(k.ventry).unwrap() {
-                Value::Invalid => return None,
-                Value::Valid(val) => return Some(val.clone()),
+            None => return Ok(None),
+            Some(k) => match self.vm.read(k.ventry)? {
+                Value::Invalid => return Ok(None),
+                Value::Valid(val) => return Ok(Some(val.clone())),
             },
         }
     }
 
-    pub fn put(&mut self, key: InnerKey, value: Value) -> Result<(), io::Error> {
+    pub fn put(&mut self, key: InnerKey, value: Value) -> Result<(), error::Error> {
         // Write to buffer
-        let should_flush = self.vm.write(value_to_bytes(&value)).unwrap();
+        let should_flush = self.vm.write(value_to_bytes(&value))?;
 
         // Update keys and index
         self.km.put(&key);
@@ -109,7 +108,7 @@ impl Store {
         Ok(())
     }
 
-    pub fn delete(&mut self, key: InnerKey) -> Result<(), io::Error> {
+    pub fn delete(&mut self, key: InnerKey) -> Result<(), error::Error> {
         self.put(key, Value::Invalid)
     }
 
