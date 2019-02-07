@@ -93,14 +93,14 @@ pub enum Value {
     Invalid,
 }
 
-pub fn get_raw_value(value: &Value) -> &[u8] {
+pub fn value_to_bytes(value: &Value) -> &[u8] {
     match value {
         Value::Invalid => &[255u8; VALUE_SIZE],
         Value::Valid(v) => &v.raw,
     }
 }
 
-pub fn value_from_raw_bytes(bytes: &[u8]) -> Result<Value, Error> {
+pub fn value_from_bytes(bytes: &[u8]) -> Result<Value, Error> {
     if bytes.len() != VALUE_SIZE {
         return Err(Error::InvalidValueSize);
     }
@@ -112,6 +112,20 @@ pub fn value_from_raw_bytes(bytes: &[u8]) -> Result<Value, Error> {
     };
     inner.raw.clone_from_slice(bytes);
     Ok(Value::Valid(inner))
+}
+
+pub fn key_to_bytes(key: &Key) -> Vec<u8> {
+    let mut bytes = vec![0u8; MKEY_SIZE];
+    for i in 0..KEY_SIZE {
+        bytes[i] = key.inner.raw[i];
+    }
+    let ventry = key.ventry;
+    bytes[KEY_SIZE] = (ventry >> 24) as u8;
+    bytes[KEY_SIZE + 1] = (ventry >> 16) as u8;
+    bytes[KEY_SIZE + 2] = (ventry >> 8) as u8;
+    bytes[KEY_SIZE + 2] = ventry as u8;
+
+    bytes
 }
 
 impl PartialOrd for InnerKey {

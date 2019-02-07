@@ -95,7 +95,7 @@ pub fn get_rw_fd<P: AsRef<Path>>(file: P) -> File {
 /// Get the mutable memmap handle
 pub fn get_rw_mmap_fd<P: AsRef<Path>>(file: P, size: usize, offset: u64) -> MmapMut {
     let fd = get_rw_fd(file.as_ref());
-
+    fd.set_len((KEY_FILE_SIZE + BUFFER_SIZE + 65536 * VALUE_SIZE) as u64).unwrap();
     unsafe {
         MmapOptions::new()
             .len(size)

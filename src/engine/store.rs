@@ -10,8 +10,7 @@ use std::sync::RwLock;
 use memmap::MmapMut;
 
 /// Seperating keys and values
-/// `values` is an insert only vector
-/// `index` for ordering the keys in the store
+/// both of them are insert only vector
 pub struct Store {
     km: KeyManager,
     vm: ValueManager,
@@ -33,16 +32,19 @@ impl<'a> Iterator for StoreIter<'a> {
     type Item = (InnerKey, InnerValue);
 
     fn next(&mut self) -> Option<Self::Item> {
-        // let rindex = self.store.index.read().unwrap();
-        // let rvalues = self.store.values.read().unwrap();
-        // if self.index < rindex.len() {
-        //     let key = &rindex[self.index];
-        //     let ventry = key.ventry;
-        //     self.index += 1;
-        //     if let Value::Valid(inner_value) = &rvalues[ventry] {
-        //         return Some((key.inner.clone(), inner_value.clone()));
-        //     }
-        // }
+        let rindex = self.store.km.index.read().unwrap();
+        while self.index < rindex.len() {
+            let key = &rindex[self.index];
+            if self.index + 1 < rindex.len() && key.inner == rindex[self.index + 1].inner {
+                self.index += 1;
+                continue;
+            }
+            let value = self.store.vm.read(key.ventry).unwrap();
+            self.index += 1;
+            if let Value::Valid(v) = value {
+                return Some((key.inner.clone(), v.clone()));
+            }
+        }
         None
     }
 }
@@ -67,32 +69,17 @@ impl Store {
     }
 
     pub fn put(&mut self, key: InnerKey, value: Value) -> Result<(), io::Error> {
-        let should_flush = self.vm.write(get_raw_value(&value)).unwrap();
-        // TODO:
-        // 1. insert keys
-        // 2. update index
+        // Write to buffer
+        let should_flush = self.vm.write(value_to_bytes(&value)).unwrap();
+
+        // Update keys and index
+        self.km.put(&key);
+
+        // Check should flush to disk or not
         if should_flush {
             self.vm.flush();
         }
-        // let (found, pos) = find_insert_point(&windex, &key);
-        // if found {
-        //     windex[pos].ventry = ventry;
-        // } else {
-        //     if pos == windex.len() {
-        //         windex.push(Key {
-        //             inner: key.clone(),
-        //             ventry,
-        //         });
-        //     } else {
-        //         windex.insert(
-        //             pos,
-        //             Key {
-        //                 inner: key.clone(),
-        //                 ventry,
-        //             },
-        //         );
-        //     }
-        // }
+
         Ok(())
     }
 
@@ -161,21 +148,22 @@ impl ValueManager {
         self.buf_pos = 0;
     }
 
-    pub fn read(&self, pos: usize) -> Result<Value, error::Error> {
-        let mut offset = pos * VALUE_SIZE + KEY_FILE_SIZE + BUFFER_SIZE;
-        if offset > self.file_pos + BUFFER_SIZE {
+    pub fn read(&self, ventry: usize) -> Result<Value, error::Error> {
+        let mut offset = ventry * VALUE_SIZE;
+        let values_len = self.file_pos - KEY_FILE_SIZE - BUFFER_SIZE;
+        if offset > values_len + BUFFER_SIZE {
             return Err(error::Error::OutOfIndex);
-        } else if offset > self.file_pos {
+        } else if offset > values_len {
             let rbuf = self.buf.read().unwrap();
-            offset -= self.file_pos;
+            offset -= values_len;
             let data = &rbuf[offset..offset + VALUE_SIZE];
-            return Ok(value_from_raw_bytes(data).unwrap());
+            return Ok(value_from_bytes(data).unwrap());
         } else {
             // Read from dio
             let rfile = self.file.read().unwrap();
             let mut data = [0; VALUE_SIZE];
-            rfile.pread(&mut data, offset as u64);
-            return Ok(value_from_raw_bytes(&data).unwrap());
+            rfile.pread(&mut data, (offset + KEY_FILE_SIZE + BUFFER_SIZE) as u64);
+            return Ok(value_from_bytes(&data).unwrap());
         }
     }
 }
@@ -183,19 +171,19 @@ impl ValueManager {
 pub struct KeyManager {
     keys: RwLock<MmapMut>,
     index: RwLock<Vec<Key>>,
-    pos: usize,
+    ventry: usize,
 }
 
 impl KeyManager {
     pub fn new<P: AsRef<Path>>(db_file: P) -> Self {
         let mmap_key = get_rw_mmap_fd(&db_file, KEY_FILE_SIZE, 0);
         let index = build_index(&mmap_key).unwrap();
-        let pos = index.len();
+        let ventry = index.len();
 
         KeyManager {
             keys: RwLock::new(mmap_key),
             index: RwLock::new(index),
-            pos,
+            ventry,
         }
     }
 
@@ -206,5 +194,37 @@ impl KeyManager {
             None => None,
             Some(entry) => Some(rindex[entry].clone()),
         }
+    }
+
+    pub fn put(&mut self, key: &InnerKey) {
+        let mut windex = self.index.write().unwrap();
+        let mut wkeys = self.keys.write().unwrap();
+
+        let ventry = self.ventry;
+        let new_key = Key {
+            inner: key.clone(),
+            ventry,
+        };
+        let kbytes = key_to_bytes(&new_key);
+
+        // Update index
+        let (found, pos) = find_insert_point(&windex, key);
+        dbg!(&found);
+        dbg!(&pos);
+        dbg!(windex.len());
+        if pos == windex.len() {
+            windex.push(new_key);
+        } else {
+            windex.insert(pos, new_key);
+        }
+
+        // Append to keys (mmap)
+        let offset = ventry * MKEY_SIZE;
+
+        for pos in offset..offset + MKEY_SIZE {
+            wkeys[pos] = kbytes[pos - offset];
+        }
+
+        self.ventry += 1;
     }
 }
