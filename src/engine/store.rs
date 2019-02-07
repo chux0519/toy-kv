@@ -52,13 +52,17 @@ impl<'a> Iterator for StoreIter<'a> {
 impl Store {
     pub fn new(db_file: PathBuf) -> Self {
         let km = KeyManager::new(&db_file);
-        let vm = ValueManager::new(&db_file);
+        let vm = ValueManager::new(
+            &db_file,
+            km.ventry * VALUE_SIZE + BUFFER_SIZE + KEY_FILE_SIZE,
+        );
 
         Store { km, vm }
     }
 
     pub fn get(&self, key: InnerKey) -> Option<InnerValue> {
         let key = self.km.find(&key);
+        dbg!(&key);
         match key {
             None => return None,
             Some(k) => match self.vm.read(k.ventry).unwrap() {
@@ -100,13 +104,12 @@ pub struct ValueManager {
 }
 
 impl ValueManager {
-    pub fn new<P: AsRef<Path>>(db_file: P) -> Self {
+    pub fn new<P: AsRef<Path>>(db_file: P, file_pos: usize) -> Self {
         let mmap_buffer = get_rw_mmap_fd(&db_file, BUFFER_SIZE, KEY_FILE_SIZE as u64);
         let buf_pos = util::get_pos_of_buffer(&mmap_buffer).unwrap();
 
         let direct_file =
             DirectFile::open(&db_file, Mode::Append, FileAccess::ReadWrite, BUFFER_SIZE).unwrap();
-        let file_pos = direct_file.end_pos();
 
         ValueManager {
             buf: RwLock::new(mmap_buffer),
@@ -151,9 +154,11 @@ impl ValueManager {
     pub fn read(&self, ventry: usize) -> Result<Value, error::Error> {
         let mut offset = ventry * VALUE_SIZE;
         let values_len = self.file_pos - KEY_FILE_SIZE - BUFFER_SIZE;
+        dbg!(offset);
+        dbg!(values_len);
         if offset > values_len + BUFFER_SIZE {
             return Err(error::Error::OutOfIndex);
-        } else if offset > values_len {
+        } else if offset >= values_len {
             let rbuf = self.buf.read().unwrap();
             offset -= values_len;
             let data = &rbuf[offset..offset + VALUE_SIZE];
@@ -190,6 +195,7 @@ impl KeyManager {
     pub fn find(&self, inner: &InnerKey) -> Option<Key> {
         let rindex = self.index.read().unwrap();
         let kentry = bsearch(&*rindex, &inner);
+        dbg!(&rindex);
         match kentry {
             None => None,
             Some(entry) => Some(rindex[entry].clone()),

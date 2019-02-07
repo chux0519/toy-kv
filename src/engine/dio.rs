@@ -110,9 +110,4 @@ impl DirectFile {
             Ok(r as usize)
         }
     }
-
-    pub fn end_pos(&self) -> usize {
-        let mut f = unsafe { File::from_raw_fd(self.fd.clone()) };
-        f.seek(io::SeekFrom::End(0)).unwrap() as usize
-    }
 }

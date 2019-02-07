@@ -111,6 +111,7 @@ pub fn value_from_bytes(bytes: &[u8]) -> Result<Value, Error> {
         raw: [0; VALUE_SIZE],
     };
     inner.raw.clone_from_slice(bytes);
+    dbg!(&inner.to_string());
     Ok(Value::Valid(inner))
 }
 

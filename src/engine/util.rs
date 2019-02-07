@@ -25,7 +25,7 @@ pub fn bsearch(index: &Vec<Key>, key: &InnerKey) -> Option<usize> {
         } else if &index[mid].inner > key {
             right = mid - 1;
         } else {
-            while mid < index.len() {
+            while mid < index.len() - 1 {
                 if &index[mid + 1].inner == key {
                     mid += 1;
                 } else {
@@ -69,7 +69,10 @@ pub fn find_insert_point(index: &Vec<Key>, key: &InnerKey) -> (bool, usize) {
             }
             right = mid - 1;
         } else {
-            while mid < index.len() {
+            if mid == index.len() - 1 {
+                return (true, mid + 1);
+            }
+            while mid < index.len() - 1 {
                 if &index[mid + 1].inner == key {
                     mid += 1;
                 } else {
@@ -95,7 +98,8 @@ pub fn get_rw_fd<P: AsRef<Path>>(file: P) -> File {
 /// Get the mutable memmap handle
 pub fn get_rw_mmap_fd<P: AsRef<Path>>(file: P, size: usize, offset: u64) -> MmapMut {
     let fd = get_rw_fd(file.as_ref());
-    fd.set_len((KEY_FILE_SIZE + BUFFER_SIZE + 65536 * VALUE_SIZE) as u64).unwrap();
+    fd.set_len((KEY_FILE_SIZE + BUFFER_SIZE + 65536 * VALUE_SIZE) as u64)
+        .unwrap();
     unsafe {
         MmapOptions::new()
             .len(size)
