@@ -110,4 +110,38 @@ impl DirectFile {
             Ok(r as usize)
         }
     }
+
+    pub fn end_pos(&self) -> usize {
+        let mut f = unsafe { File::from_raw_fd(self.fd.clone()) };
+        f.seek(io::SeekFrom::End(0)).unwrap() as usize
+    }
+}
+
+#[repr(align(4096))]
+pub struct Block4k {
+    pub bytes: [u8; 4096],
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+    use tempfile::tempdir;
+
+    fn tmpfile(name: &str) -> DirectFile {
+        let tmp = tempdir().unwrap();
+        let mut path = tmp.into_path();
+
+        path.push(name);
+        DirectFile::open(&path, Mode::Append, FileAccess::ReadWrite, 4096).unwrap()
+    }
+
+    #[test]
+    fn simple() {
+        let file = tmpfile("direct");
+        let data = Block4k { bytes: [0; 4096] };
+        let res = file.pwrite(&data.bytes, 0);
+        dbg!(&res);
+        assert!(res.is_ok());
+    }
 }

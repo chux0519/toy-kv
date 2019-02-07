@@ -3,6 +3,7 @@ use super::kv::*;
 
 use memmap::{MmapMut, MmapOptions};
 use std::fs::{File, OpenOptions};
+use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 /// Binary search
@@ -98,7 +99,8 @@ pub fn get_rw_fd<P: AsRef<Path>>(file: P) -> File {
 /// Get the mutable memmap handle
 pub fn get_rw_mmap_fd<P: AsRef<Path>>(file: P, size: usize, offset: u64) -> MmapMut {
     let fd = get_rw_fd(file.as_ref());
-    fd.set_len((KEY_FILE_SIZE + BUFFER_SIZE + 65536 * VALUE_SIZE) as u64)
+    // FIXME:
+    fd.set_len((KEY_FILE_SIZE + BUFFER_SIZE + VALUE_FILE_SIZE) as u64)
         .unwrap();
     unsafe {
         MmapOptions::new()
@@ -123,31 +125,37 @@ pub fn get_rw_mmap_fd<P: AsRef<Path>>(file: P, size: usize, offset: u64) -> Mmap
 /// ];
 /// // ventries should be ordered as: [1, 2, 0, 3]
 /// ```
-pub fn build_index(mkey: &[u8]) -> Result<Vec<Key>, Error> {
-    if mkey.len() % MKEY_SIZE != 0 {
+pub fn build_index<P: AsRef<Path>>(path: P, start: usize, end: usize) -> Result<Vec<Key>, Error> {
+    if (end - start) % (KEY_FILE_SIZE + VALUE_FILE_SIZE) != 0 {
         return Err(Error::WrongAlignment);
     }
-    let mut start = 0;
-    let mut end = start + MKEY_SIZE;
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
     let mut v = Vec::new();
-    while end <= mkey.len() {
-        let chunk = &mkey[start..end];
-        if chunk == [0; MKEY_SIZE] {
-            println!("empty chunk detected, start at {}, end at {}", start, end);
-            break;
+    for pos in (start..end).step_by(KEY_FILE_SIZE + VALUE_FILE_SIZE) {
+        // For each chunk
+        let mut mkey = vec![0; KEY_FILE_SIZE];
+        dbg!(pos);
+        reader.seek(SeekFrom::Start(pos as u64))?;
+        reader.read_exact(&mut mkey)?;
+        for x in (0..mkey.len()).step_by(MKEY_SIZE) {
+            let chunk = &mkey[x..x + MKEY_SIZE];
+            if chunk == [0; MKEY_SIZE] {
+                dbg!(format!("empty chunk detected at {}", x));
+                break;
+            }
+            let mut inner_key = InnerKey { raw: [0; KEY_SIZE] };
+            inner_key.raw.clone_from_slice(&chunk[0..KEY_SIZE]);
+            v.push(Key {
+                inner: inner_key,
+                ventry: (chunk[KEY_SIZE] as usize) << 24
+                    | (chunk[KEY_SIZE + 1] as usize) << 16
+                    | (chunk[KEY_SIZE + 2] as usize) << 8
+                    | chunk[KEY_SIZE + 3] as usize,
+            });
         }
-        let mut inner_key = InnerKey { raw: [0; KEY_SIZE] };
-        inner_key.raw.clone_from_slice(&chunk[0..KEY_SIZE]);
-        v.push(Key {
-            inner: inner_key,
-            ventry: (chunk[KEY_SIZE] as usize) << 24
-                | (chunk[KEY_SIZE + 1] as usize) << 16
-                | (chunk[KEY_SIZE + 2] as usize) << 8
-                | chunk[KEY_SIZE + 3] as usize,
-        });
-        start += MKEY_SIZE;
-        end += MKEY_SIZE;
     }
+
     // Multi-Level sort by [(inner, asc), (ventry. asc)]
     v.sort_by(|a, b| {
         if a.inner == b.inner {
@@ -159,11 +167,12 @@ pub fn build_index(mkey: &[u8]) -> Result<Vec<Key>, Error> {
     Ok(v)
 }
 
-pub fn get_pos_of_buffer(buffer: &[u8]) -> Result<usize, Error> {
+pub fn get_buffer_pos(buffer: &[u8]) -> Result<usize, Error> {
     if buffer.len() % VALUE_SIZE != 0 {
         return Err(Error::WrongAlignment);
     }
     let mut pos = 0;
+    dbg!(buffer.len());
     while pos < buffer.len() {
         let chunk = &buffer[pos..pos + VALUE_SIZE];
         if chunk[..] == [0; VALUE_SIZE][..] {
@@ -239,11 +248,28 @@ mod util_tests {
 
     #[cfg(test)]
     mod build_index_tests {
+        use super::super::super::kv::*;
         use super::super::build_index;
+
+        use std::fs::File;
+        use std::io::Write;
+        use std::path::PathBuf;
+        use tempfile::tempdir;
+
+        fn tmp_path(name: &str) -> PathBuf {
+            let tmp = tempdir().unwrap();
+            let mut path = tmp.into_path();
+
+            path.push(name);
+            path
+        }
+
         #[test]
         fn broken_test() {
-            let data = [0; 11];
-            let index = build_index(&data);
+            let tmp_path = tmp_path("broken_test");
+            File::create(&tmp_path).unwrap();
+            let index = build_index(&tmp_path, 0, 11);
+            dbg!(&index);
             assert!(index.is_err());
         }
 
@@ -255,7 +281,13 @@ mod util_tests {
                 1, 1, 1, 1, 1, 1, 1, 3, 0, 0, 0, 2, // the third record
                 2, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 3, // the fourth record
             ];
-            let index = build_index(&data).unwrap();
+            let tmp_path = tmp_path("broken_test");
+            let mut f = File::create(&tmp_path).unwrap();
+            f.write(&data).unwrap();
+            f.write(&vec![0; VALUE_FILE_SIZE + KEY_FILE_SIZE - 48])
+                .unwrap();
+            let index = build_index(&tmp_path, 0, VALUE_FILE_SIZE + KEY_FILE_SIZE).unwrap();
+            dbg!(&index);
             // ventry should be ordered as: 1, 2, 0, 3
             let entries: Vec<usize> = index.iter().map(|key| key.ventry).collect();
             dbg!(&entries);
@@ -265,9 +297,9 @@ mod util_tests {
 
     use super::super::error::*;
     use super::super::kv::*;
-    use super::get_pos_of_buffer;
+    use super::get_buffer_pos;
     #[test]
-    fn get_pos_of_buffer_test() {
+    fn get_buffer_pos_test() {
         // Ok
         let cases = [
             (vec![], 0),
@@ -280,12 +312,12 @@ mod util_tests {
         ];
 
         for case in &cases {
-            let result = get_pos_of_buffer(&case.0).unwrap();
+            let result = get_buffer_pos(&case.0).unwrap();
             assert_eq!(result, case.1);
         }
 
         // Err
-        let err = get_pos_of_buffer(&[1]).err().unwrap();
+        let err = get_buffer_pos(&vec![1]).err().unwrap();
         assert_eq!(err, Error::WrongAlignment);
     }
 }

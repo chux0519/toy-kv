@@ -6,8 +6,11 @@ use super::error::Error;
 
 pub const KEY_SIZE: usize = 8;
 pub const MKEY_SIZE: usize = 12; // 8 bytes for key, 4 bytes for the index of values
+
+pub const MAX_KV_PAIR: usize = 65536; // 4 bytes
 pub const VALUE_SIZE: usize = 256;
-pub const KEY_FILE_SIZE: usize = 65536 * MKEY_SIZE;
+pub const VALUE_FILE_SIZE: usize = MAX_KV_PAIR * VALUE_SIZE;
+pub const KEY_FILE_SIZE: usize = MAX_KV_PAIR * MKEY_SIZE;
 pub const BUFFER_SIZE: usize = 4 * 1024; // 4kb buffer szie
 
 /// Keys are only allowed in 8 bytes

@@ -4,7 +4,7 @@ use super::kv::*;
 use super::util::{self, *};
 
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::RwLock;
 
 use memmap::MmapMut;
@@ -50,12 +50,34 @@ impl<'a> Iterator for StoreIter<'a> {
 }
 
 impl Store {
-    pub fn new(db_file: PathBuf) -> Self {
-        let km = KeyManager::new(&db_file);
-        let vm = ValueManager::new(
+    pub fn new<P: AsRef<Path>>(db_file: P) -> Self {
+        // TODO: Ensure size
+
+        // Init buffer(mmap)
+        let mmap_buffer = get_rw_mmap_fd(&db_file, BUFFER_SIZE, 0);
+        let buf_pos = util::get_buffer_pos(&mmap_buffer).unwrap();
+
+        // Get values(dio) handle
+        let direct_file =
+            DirectFile::open(&db_file, Mode::Append, FileAccess::ReadWrite, BUFFER_SIZE).unwrap();
+        let end_pos = direct_file.end_pos();
+
+        // Build index
+        let index = build_index(&db_file, BUFFER_SIZE, end_pos).unwrap();
+        let ventry = index.len() % MAX_KV_PAIR;
+
+        // Init keys(mmap)
+        let mmap_key = get_rw_mmap_fd(
             &db_file,
-            km.ventry * VALUE_SIZE + BUFFER_SIZE + KEY_FILE_SIZE,
+            KEY_FILE_SIZE,
+            (end_pos - KEY_FILE_SIZE - VALUE_FILE_SIZE) as u64,
         );
+
+        let km = KeyManager::new(mmap_key, index, ventry);
+
+        let file_pos = 0;
+        // let file_pos = util::get_file_pos(&direct_file);
+        let vm = ValueManager::new(mmap_buffer, buf_pos, direct_file, file_pos);
 
         Store { km, vm }
     }
@@ -104,13 +126,12 @@ pub struct ValueManager {
 }
 
 impl ValueManager {
-    pub fn new<P: AsRef<Path>>(db_file: P, file_pos: usize) -> Self {
-        let mmap_buffer = get_rw_mmap_fd(&db_file, BUFFER_SIZE, KEY_FILE_SIZE as u64);
-        let buf_pos = util::get_pos_of_buffer(&mmap_buffer).unwrap();
-
-        let direct_file =
-            DirectFile::open(&db_file, Mode::Append, FileAccess::ReadWrite, BUFFER_SIZE).unwrap();
-
+    pub fn new(
+        mmap_buffer: MmapMut,
+        buf_pos: usize,
+        direct_file: DirectFile,
+        file_pos: usize,
+    ) -> Self {
         ValueManager {
             buf: RwLock::new(mmap_buffer),
             buf_pos,
@@ -141,6 +162,7 @@ impl ValueManager {
         // Do flush
         let mut wbuf = self.buf.write().unwrap();
         let wfile = self.file.write().unwrap();
+        // FIXME: content should be aligned in 4kb
         let bytes = wfile
             .pwrite(&wbuf, self.file_pos as u64)
             .expect("Failed to append to db file");
@@ -167,7 +189,8 @@ impl ValueManager {
             // Read from dio
             let rfile = self.file.read().unwrap();
             let mut data = [0; VALUE_SIZE];
-            rfile.pread(&mut data, (offset + KEY_FILE_SIZE + BUFFER_SIZE) as u64);
+            let read = rfile.pread(&mut data, (offset + KEY_FILE_SIZE + BUFFER_SIZE) as u64);
+            dbg!(&read);
             return Ok(value_from_bytes(&data).unwrap());
         }
     }
@@ -180,11 +203,7 @@ pub struct KeyManager {
 }
 
 impl KeyManager {
-    pub fn new<P: AsRef<Path>>(db_file: P) -> Self {
-        let mmap_key = get_rw_mmap_fd(&db_file, KEY_FILE_SIZE, 0);
-        let index = build_index(&mmap_key).unwrap();
-        let ventry = index.len();
-
+    pub fn new(mmap_key: MmapMut, index: Vec<Key>, ventry: usize) -> Self {
         KeyManager {
             keys: RwLock::new(mmap_key),
             index: RwLock::new(index),
