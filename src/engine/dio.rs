@@ -63,15 +63,13 @@ impl DirectFile {
         };
         let path = path.as_ref().as_os_str().as_bytes();
         match retry(|| unsafe {
-            libc::open(path.as_ptr() as *const i8, flags, mode as libc::c_uint) as isize
+            libc::open(path.as_ptr() as *const i8, flags, u32::from(mode)) as isize
         }) {
             -1 => Err(io::Error::last_os_error()),
-            fd => {
-                return Ok(DirectFile {
-                    fd: fd as i32,
-                    alignment: alignment,
-                });
-            }
+            fd => Ok(DirectFile {
+                fd: fd as i32,
+                alignment,
+            }),
         }
     }
 
@@ -114,7 +112,7 @@ impl DirectFile {
     }
 
     pub fn end_pos(&self) -> usize {
-        let mut f = unsafe { File::from_raw_fd(self.fd.clone()) };
+        let mut f = unsafe { File::from_raw_fd(self.fd) };
         f.seek(io::SeekFrom::End(0)).unwrap() as usize
     }
 }

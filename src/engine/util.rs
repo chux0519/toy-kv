@@ -10,8 +10,8 @@ use std::path::Path;
 /// Given an `InnerKey`
 /// Returns the position of the key in the index vector
 /// Returns `None` if not found
-pub fn bsearch(index: &Vec<Key>, key: &InnerKey) -> Option<usize> {
-    if index.len() == 0 {
+pub fn bsearch(index: &[Key], key: &InnerKey) -> Option<usize> {
+    if index.is_empty() {
         return None;
     }
     let mut left = 0;
@@ -43,8 +43,8 @@ pub fn bsearch(index: &Vec<Key>, key: &InnerKey) -> Option<usize> {
 /// Given an `InnerKey`
 /// Returns a tuple in format (found, position)
 /// When new kv pair inserted, find the index position and insert to it
-pub fn find_insert_point(index: &Vec<Key>, key: &InnerKey) -> (bool, usize) {
-    if index.len() == 0 {
+pub fn find_insert_point(index: &[Key], key: &InnerKey) -> (bool, usize) {
+    if index.is_empty() {
         return (false, 0);
     }
     if key.raw < index[0].inner.raw {
@@ -92,7 +92,7 @@ pub fn get_rw_fd<P: AsRef<Path>>(file: P) -> File {
         .read(true)
         .write(true)
         .open(&file)
-        .expect(&format!("failed to open file: {:?}", file.as_ref()))
+        .unwrap_or_else(|_| panic!("failed to open file: {:?}", file.as_ref()))
 }
 
 /// Get the mutable memmap handle
@@ -103,7 +103,7 @@ pub fn get_rw_mmap_fd<P: AsRef<Path>>(file: P, size: usize, offset: u64) -> Mmap
             .len(size)
             .offset(offset)
             .map_mut(&fd)
-            .expect(&format!("failed to mmap file: {:?}", file.as_ref()))
+            .unwrap_or_else(|_| panic!("failed to mmap file: {:?}", file.as_ref()))
     }
 }
 
@@ -182,7 +182,7 @@ pub fn ensure_size<P: AsRef<Path>>(path: P, chunk_size: u64, item_size: u64) -> 
         Err(_) => {
             // Create
             File::create(&path)?;
-            return ensure_size(path, chunk_size, item_size);
+            ensure_size(path, chunk_size, item_size)
         }
         Ok(meta) => {
             let len = meta.len();
@@ -193,7 +193,7 @@ pub fn ensure_size<P: AsRef<Path>>(path: P, chunk_size: u64, item_size: u64) -> 
                 .open(&path)?;
             if len == 0 {
                 f.set_len(chunk_size)?;
-                return Ok(0);
+                Ok(0)
             } else {
                 // Read last item
                 let mut reader = BufReader::new(&f);
@@ -206,7 +206,7 @@ pub fn ensure_size<P: AsRef<Path>>(path: P, chunk_size: u64, item_size: u64) -> 
                     return Ok(len);
                 }
                 let pos = find_last_pos(&mut reader, len, chunk_size, item_size)?;
-                return Ok(pos);
+                Ok(pos)
             }
         }
     }

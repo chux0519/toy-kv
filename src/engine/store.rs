@@ -44,7 +44,7 @@ impl<'a> Iterator for StoreIter<'a> {
             let value = self.store.vm.read(key.ventry).unwrap();
             self.index += 1;
             if let Value::Valid(v) = value {
-                return Some((key.inner.clone(), v.clone()));
+                return Some((key.inner.clone(), *v.clone()));
             }
         }
         None
@@ -108,10 +108,10 @@ impl Store {
     pub fn get(&mut self, key: InnerKey) -> Result<Option<InnerValue>, error::Error> {
         let key = self.km.find(&key);
         match key {
-            None => return Ok(None),
+            None => Ok(None),
             Some(k) => match self.vm.read(k.ventry)? {
-                Value::Invalid => return Ok(None),
-                Value::Valid(val) => return Ok(Some(val.clone())),
+                Value::Invalid => Ok(None),
+                Value::Valid(val) => Ok(Some(*val.clone())),
             },
         }
     }
@@ -130,8 +130,6 @@ impl Store {
             // Check if need more space
             if file_pos % VALUE_FILE_SIZE as u64 == 0 {
                 let new_store = Store::new(&self.key_file, &self.value_file, &self.buffer_file)?;
-                drop(&mut self.vm);
-                drop(&mut self.km);
                 self.vm = new_store.vm;
                 self.km = new_store.km;
             }
@@ -206,12 +204,12 @@ impl ValueManager {
     pub fn read(&mut self, ventry: usize) -> Result<Value, error::Error> {
         let mut offset = ventry * VALUE_SIZE;
         if offset as u64 > self.file_pos + BUFFER_SIZE as u64 {
-            return Err(error::Error::OutOfIndex);
+            Err(error::Error::OutOfIndex)
         } else if offset as u64 >= self.file_pos {
             let rbuf = self.buf.read().unwrap();
             offset -= self.file_pos as usize;
             let data = &rbuf[offset..offset + VALUE_SIZE];
-            return Ok(value_from_bytes(data).unwrap());
+            Ok(value_from_bytes(data).unwrap())
         } else {
             let v = self.cache.try_get(offset as u64, VALUE_SIZE as u64);
             match v {
@@ -221,11 +219,9 @@ impl ValueManager {
                     let bytes = self
                         .cache
                         .try_load(&rfile, VALUE_SIZE as u64, offset as u64)?;
-                    return Ok(value_from_bytes(&bytes).unwrap());
+                    Ok(value_from_bytes(&bytes).unwrap())
                 }
-                Some(bytes) => {
-                    return Ok(value_from_bytes(&bytes).unwrap());
-                }
+                Some(bytes) => Ok(value_from_bytes(&bytes).unwrap()),
             }
         }
     }
@@ -308,7 +304,7 @@ impl KeyManager {
         let kbytes = key_to_bytes(&new_key);
 
         // Update index
-        let (found, pos) = find_insert_point(&windex, key);
+        let (_found, pos) = find_insert_point(&windex, key);
 
         if pos == windex.len() {
             windex.push(new_key);

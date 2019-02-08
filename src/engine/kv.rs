@@ -62,9 +62,7 @@ impl FromStr for InnerKey {
         }
         let mut key = [0; 8];
         let chars = s.as_bytes();
-        for i in 0..s.len() {
-            key[i] = chars[i];
-        }
+        key[..s.len()].clone_from_slice(&chars[..s.len()]);
         Ok(InnerKey { raw: key })
     }
 }
@@ -78,9 +76,7 @@ impl FromStr for InnerValue {
         }
         let mut value = [0; 256];
         let chars = s.as_bytes();
-        for i in 0..s.len() {
-            value[i] = chars[i];
-        }
+        value[..s.len()].clone_from_slice(&chars[..s.len()]);
         Ok(InnerValue { raw: value })
     }
 }
@@ -92,7 +88,7 @@ pub struct Key {
 }
 
 pub enum Value {
-    Valid(InnerValue),
+    Valid(Box<InnerValue>),
     Invalid,
 }
 
@@ -114,14 +110,12 @@ pub fn value_from_bytes(bytes: &[u8]) -> Result<Value, Error> {
         raw: [0; VALUE_SIZE],
     };
     inner.raw.clone_from_slice(bytes);
-    Ok(Value::Valid(inner))
+    Ok(Value::Valid(Box::new(inner)))
 }
 
 pub fn key_to_bytes(key: &Key) -> Vec<u8> {
     let mut bytes = vec![0u8; MKEY_SIZE];
-    for i in 0..KEY_SIZE {
-        bytes[i] = key.inner.raw[i];
-    }
+    bytes[..KEY_SIZE].clone_from_slice(&key.inner.raw[..KEY_SIZE]);
     let ventry = key.ventry;
     bytes[KEY_SIZE] = (ventry >> 24) as u8;
     bytes[KEY_SIZE + 1] = (ventry >> 16) as u8;

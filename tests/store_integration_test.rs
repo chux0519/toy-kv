@@ -34,7 +34,7 @@ mod store_integration_test {
                 for kv in &kvs {
                     db.put(
                         kv.0.parse().unwrap(),
-                        kv::Value::Valid(kv.1.parse().unwrap()),
+                        kv::Value::Valid(Box::new(kv.1.parse().unwrap())),
                     )
                     .unwrap();
                 }
@@ -69,7 +69,7 @@ mod store_integration_test {
         for kv in &kvs {
             db.put(
                 kv.0.parse().unwrap(),
-                kv::Value::Valid(kv.1.parse().unwrap()),
+                kv::Value::Valid(Box::new(kv.1.parse().unwrap())),
             )
             .unwrap();
         }
@@ -100,7 +100,7 @@ mod store_integration_test {
         for kv in kvs {
             db.put(
                 kv.0.parse().unwrap(),
-                kv::Value::Valid(kv.1.parse().unwrap()),
+                kv::Value::Valid(Box::new(kv.1.parse().unwrap())),
             )
             .unwrap();
         }
@@ -122,7 +122,7 @@ mod store_integration_test {
             for _ in 0..65536 {
                 db.put(
                     "key00".parse().unwrap(),
-                    kv::Value::Valid("value00".parse().unwrap()),
+                    kv::Value::Valid(Box::new("value00".parse().unwrap())),
                 )
                 .unwrap();
             }
