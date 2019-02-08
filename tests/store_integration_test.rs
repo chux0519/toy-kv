@@ -56,7 +56,7 @@ mod store_integration_test {
 
     #[test]
     fn store_delete() {
-        let (k, v, b) = tmpfile("test_store_put_get");
+        let (k, v, b) = tmpfile("test_store_delete");
         let mut db = store::Store::new(&k, &v, &b).unwrap();
         let kvs = vec![
             ("key00", "value00"),
@@ -87,7 +87,7 @@ mod store_integration_test {
 
     #[test]
     fn store_scan() {
-        let (k, v, b) = tmpfile("test_store_put_get");
+        let (k, v, b) = tmpfile("test_store_scan");
         let mut db = store::Store::new(&k, &v, &b).unwrap();
         let kvs = vec![
             ("key00", "value00"),
@@ -114,28 +114,34 @@ mod store_integration_test {
         assert!(res.is_none());
     }
 
+    use time::PreciseTime;
     #[test]
     fn store_to_grow() {
         let (k, v, b) = tmpfile("test_store_put_get");
         {
             let mut db = store::Store::new(&k, &v, &b).unwrap();
-            for _ in 0..65536 {
+            let start = PreciseTime::now();
+            for i in 0..65536 {
                 db.put(
-                    "key00".parse().unwrap(),
-                    kv::Value::Valid(Box::new("value00".parse().unwrap())),
+                    format!("k{}", i).parse().unwrap(),
+                    kv::Value::Valid(Box::new(format!("v{}", i).parse().unwrap())),
                 )
                 .unwrap();
             }
+            let end = PreciseTime::now();
+            println!("{} seconds for put", start.to(end));
         }
 
         {
             // Restore from file
             let mut db = store::Store::new(&k, &v, &b).unwrap();
-            for _ in 0..65536 {
-                let v = db.get("key00".parse().unwrap()).unwrap().unwrap();
-                assert_eq!(v.to_string(), "value00");
+            let start = PreciseTime::now();
+            for i in 0..65536 {
+                let v = db.get(format!("k{}", i).parse().unwrap()).unwrap().unwrap();
+                assert_eq!(v.to_string(), format!("v{}", i));
             }
+            let end = PreciseTime::now();
+            println!("{} seconds for get", start.to(end));
         }
     }
 }
-// TODO: concurrent tests

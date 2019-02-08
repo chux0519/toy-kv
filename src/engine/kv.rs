@@ -11,7 +11,7 @@ pub const MAX_KV_PAIR: usize = 65536; // 4 bytes
 pub const VALUE_SIZE: usize = 256;
 pub const VALUE_FILE_SIZE: usize = MAX_KV_PAIR * VALUE_SIZE;
 pub const KEY_FILE_SIZE: usize = MAX_KV_PAIR * MKEY_SIZE;
-pub const BUFFER_SIZE: usize = 4 * 1024; // 4kb buffer szie
+pub const BUFFER_SIZE: usize = 16 * 1024 * 1024; // 16mb buffer size
 
 /// Keys are only allowed in 8 bytes
 /// While Values for 256 bytes each
