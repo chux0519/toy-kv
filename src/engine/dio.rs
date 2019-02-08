@@ -66,10 +66,15 @@ impl DirectFile {
             libc::open(path.as_ptr() as *const i8, flags, mode as libc::c_uint) as isize
         }) {
             -1 => Err(io::Error::last_os_error()),
-            fd => Ok(DirectFile {
-                fd: fd as i32,
-                alignment: alignment,
-            }),
+            fd => {
+                dbg!(fd);
+                dbg!(flags);
+                dbg!(mode);
+                return Ok(DirectFile {
+                    fd: fd as i32,
+                    alignment: alignment,
+                });
+            }
         }
     }
 
@@ -77,7 +82,7 @@ impl DirectFile {
         self.alignment
     }
 
-    pub fn pread(&self, buf: &mut [u8], off: u64) -> io::Result<usize> {
+    pub fn pread(&self, buf: &mut [u8], off: u64) -> io::Result<u64> {
         let r = unsafe {
             ::libc::pread(
                 self.fd,
@@ -90,11 +95,14 @@ impl DirectFile {
         if r < 0 {
             Err(io::Error::last_os_error())
         } else {
-            Ok(r as usize)
+            Ok(r as u64)
         }
     }
 
     pub fn pwrite(&self, buf: &[u8], off: u64) -> io::Result<usize> {
+        dbg!(self.fd);
+        dbg!(buf.len());
+        dbg!(off);
         let r = unsafe {
             ::libc::pwrite(
                 self.fd,
@@ -126,6 +134,7 @@ pub struct Block4k {
 mod test {
 
     use super::*;
+    use std::sync::RwLock;
     use tempfile::tempdir;
 
     fn tmpfile(name: &str) -> DirectFile {
@@ -133,14 +142,16 @@ mod test {
         let mut path = tmp.into_path();
 
         path.push(name);
-        DirectFile::open(&path, Mode::Append, FileAccess::ReadWrite, 4096).unwrap()
+        DirectFile::open(&path, Mode::Open, FileAccess::ReadWrite, 4096).unwrap()
     }
 
     #[test]
     fn simple() {
         let file = tmpfile("direct");
+        let lock = RwLock::new(file);
+        let wfile = lock.write().unwrap();
         let data = Block4k { bytes: [0; 4096] };
-        let res = file.pwrite(&data.bytes, 0);
+        let res = wfile.pwrite(&data.bytes, 0);
         dbg!(&res);
         assert!(res.is_ok());
     }

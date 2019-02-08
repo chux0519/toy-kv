@@ -121,8 +121,8 @@ pub fn get_rw_mmap_fd<P: AsRef<Path>>(file: P, size: usize, offset: u64) -> Mmap
 /// ];
 /// // ventries should be ordered as: [1, 2, 0, 3]
 /// ```
-pub fn build_index<P: AsRef<Path>>(path: P, start: usize, end: usize) -> Result<Vec<Key>, Error> {
-    if (end - start) % (KEY_FILE_SIZE + VALUE_FILE_SIZE) != 0 {
+pub fn build_index<P: AsRef<Path>>(path: P, start: u64, end: u64) -> Result<Vec<Key>, Error> {
+    if (end - start) % KEY_FILE_SIZE as u64 != 0 {
         return Err(Error::WrongAlignment);
     }
     let file = File::open(path)?;
@@ -163,7 +163,7 @@ pub fn build_index<P: AsRef<Path>>(path: P, start: usize, end: usize) -> Result<
     Ok(v)
 }
 
-pub fn get_buffer_pos(buffer: &[u8]) -> Result<usize, Error> {
+pub fn get_buffer_pos(buffer: &[u8]) -> Result<u64, Error> {
     if buffer.len() % VALUE_SIZE != 0 {
         return Err(Error::WrongAlignment);
     }
@@ -177,16 +177,16 @@ pub fn get_buffer_pos(buffer: &[u8]) -> Result<usize, Error> {
         }
         pos += VALUE_SIZE;
     }
-    Ok(pos)
+    Ok(pos as u64)
 }
 
-pub fn ensure_size<P: AsRef<Path>>(path: P) -> Result<usize, Error> {
+pub fn ensure_size<P: AsRef<Path>>(path: P, chunk_size: u64, item_size: u64) -> Result<u64, Error> {
     let metadata = fs::metadata(&path);
     match metadata {
         Err(_) => {
             // Create
             File::create(&path)?;
-            return ensure_size(path);
+            return ensure_size(path, chunk_size, item_size);
         }
         Ok(meta) => {
             let len = meta.len();
@@ -196,42 +196,49 @@ pub fn ensure_size<P: AsRef<Path>>(path: P) -> Result<usize, Error> {
                 .create(true)
                 .open(&path)?;
             if len == 0 {
-                f.set_len((BUFFER_SIZE + KEY_FILE_SIZE + VALUE_FILE_SIZE) as u64)?;
-                return Ok(BUFFER_SIZE + KEY_FILE_SIZE);
+                f.set_len(chunk_size)?;
+                return Ok(0);
             } else {
-                // Read last VALUE_SIZE
+                // Read last item
                 let mut reader = BufReader::new(&f);
-                reader.seek(SeekFrom::End(-(VALUE_SIZE as i64)))?;
-                let mut buf = [0; VALUE_SIZE];
+                reader.seek(SeekFrom::End(-(item_size as i64)))?;
+                let mut buf = vec![0; item_size as usize];
                 reader.read_exact(&mut buf)?;
-                if buf[..] != [0; VALUE_SIZE][..] {
+                if buf[..] != vec![0; item_size as usize][..] {
                     // Full
-                    f.set_len(len + (KEY_FILE_SIZE + VALUE_FILE_SIZE) as u64)?;
-                    return Ok(len as usize + KEY_FILE_SIZE);
+                    f.set_len(len + chunk_size)?;
+                    return Ok(len + chunk_size);
                 }
-                let pos = find_value_pos(&mut reader, len)?;
+                let pos = find_last_pos(&mut reader, len, chunk_size, item_size)?;
                 return Ok(pos);
             }
         }
     }
 }
 
-fn find_value_pos<R: Read + Seek>(reader: &mut R, len: u64) -> Result<usize, Error> {
-    let pos = len - VALUE_FILE_SIZE as u64;
+fn find_last_pos<R: Read + Seek>(
+    reader: &mut R,
+    len: u64,
+    chunk_size: u64,
+    item_size: u64,
+) -> Result<u64, Error> {
+    let pos = len - chunk_size as u64;
     reader.seek(SeekFrom::Start(pos))?;
-
-    for x in (pos..len).step_by(VALUE_SIZE) {
-        let mut buf = [0; BUFFER_SIZE];
-        reader.read_exact(&mut buf)?;
-        // BUFFER_SIZE(4kb) is 16 times of VALUE_SIZE(256byte)
-        for i in (0..BUFFER_SIZE).step_by(VALUE_SIZE) {
-            let chunk = &buf[i..i + VALUE_SIZE];
-            if chunk[..] == [0; VALUE_SIZE][..] {
-                return Ok(x as usize + i);
-            }
+    let mut buf = vec![0; chunk_size as usize];
+    reader.read_exact(&mut buf)?;
+    // BUFFER_SIZE(4kb) is 16 times of VALUE_SIZE(256byte)
+    for i in (0..chunk_size as usize).step_by(item_size as usize) {
+        let chunk = &buf[i..i + item_size as usize];
+        if chunk[..] == vec![0; item_size as usize][..] {
+            return Ok(i as u64);
         }
     }
     unreachable!();
+}
+
+pub fn get_file_size<P: AsRef<Path>>(path: P) -> Result<u64, Error> {
+    let metadata = fs::metadata(&path)?;
+    Ok(metadata.len())
 }
 
 #[cfg(test)]
@@ -334,9 +341,8 @@ mod util_tests {
             let tmp_path = tmp_path("broken_test");
             let mut f = File::create(&tmp_path).unwrap();
             f.write(&data).unwrap();
-            f.write(&vec![0; VALUE_FILE_SIZE + KEY_FILE_SIZE - 48])
-                .unwrap();
-            let index = build_index(&tmp_path, 0, VALUE_FILE_SIZE + KEY_FILE_SIZE).unwrap();
+            f.write(&vec![0; KEY_FILE_SIZE - data.len()]).unwrap();
+            let index = build_index(&tmp_path, 0, KEY_FILE_SIZE as u64).unwrap();
             dbg!(&index);
             // ventry should be ordered as: 1, 2, 0, 3
             let entries: Vec<usize> = index.iter().map(|key| key.ventry).collect();
@@ -363,7 +369,7 @@ mod util_tests {
 
         for case in &cases {
             let result = get_buffer_pos(&case.0).unwrap();
-            assert_eq!(result, case.1);
+            assert_eq!(result, case.1 as u64);
         }
 
         // Err

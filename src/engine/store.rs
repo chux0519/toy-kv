@@ -1,9 +1,9 @@
-use super::dio::{DirectFile, FileAccess, Mode};
+use super::dio::{Block4k, DirectFile, FileAccess, Mode};
 use super::error;
 use super::kv::*;
 use super::util::{self, *};
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
 use memmap::MmapMut;
@@ -13,16 +13,19 @@ use memmap::MmapMut;
 pub struct Store {
     km: KeyManager,
     vm: ValueManager,
+    key_file: PathBuf,
+    buffer_file: PathBuf,
+    value_file: PathBuf,
 }
 
 /// For iteraing the store
 pub struct StoreIter<'a> {
-    store: &'a Store,
+    store: &'a mut Store,
     index: usize,
 }
 
 impl<'a> StoreIter<'a> {
-    pub fn new(store: &'a Store) -> Self {
+    pub fn new(store: &'a mut Store) -> Self {
         StoreIter { store, index: 0 }
     }
 }
@@ -49,41 +52,66 @@ impl<'a> Iterator for StoreIter<'a> {
 }
 
 impl Store {
-    pub fn new<P: AsRef<Path>>(db_file: P) -> Result<Self, error::Error> {
-        let file_pos = util::ensure_size(&db_file)?;
-        dbg!(file_pos);
+    pub fn new<P: AsRef<Path>>(
+        key_file: P,
+        value_file: P,
+        buffer_file: P,
+    ) -> Result<Self, error::Error> {
+        let key_pos = util::ensure_size(&key_file, KEY_FILE_SIZE as u64, KEY_SIZE as u64)?;
+        dbg!(key_pos);
+        util::ensure_size(&value_file, VALUE_FILE_SIZE as u64, VALUE_SIZE as u64)?;
+        // FIXME: Corner case
+        let buffer_pos = util::ensure_size(&buffer_file, BUFFER_SIZE as u64, VALUE_SIZE as u64)?;
+        dbg!(buffer_pos);
 
+        let value_pos =
+            (key_pos / MKEY_SIZE as u64 - buffer_pos / VALUE_SIZE as u64) * VALUE_SIZE as u64;
+        dbg!(value_pos);
+        Store::init(&key_file, &value_file, &buffer_file, value_pos)
+    }
+
+    fn init<P: AsRef<Path>>(
+        key_file: P,
+        value_file: P,
+        buffer_file: P,
+        value_pos: u64,
+    ) -> Result<Self, error::Error> {
         // Init buffer(mmap)
-        let mmap_buffer = get_rw_mmap_fd(&db_file, BUFFER_SIZE, 0);
+        let mmap_buffer = get_rw_mmap_fd(&buffer_file, BUFFER_SIZE, 0);
         let buf_pos = util::get_buffer_pos(&mmap_buffer)?;
         dbg!(buf_pos);
 
         // Get values(dio) handle
-        let direct_file =
-            DirectFile::open(&db_file, Mode::Append, FileAccess::ReadWrite, BUFFER_SIZE)?;
-        let end_pos = direct_file.end_pos();
+        let direct_file = DirectFile::open(&value_file, Mode::Append, FileAccess::ReadWrite, 4096)?;
 
         // Build index
-        let index = build_index(&db_file, BUFFER_SIZE, end_pos)?;
+        let key_file_end = util::get_file_size(&key_file)?;
+        let index = build_index(&key_file, 0, key_file_end)?;
         let ventry = index.len() % MAX_KV_PAIR;
 
         // Init keys(mmap)
         let mmap_key = get_rw_mmap_fd(
-            &db_file,
+            &key_file,
             KEY_FILE_SIZE,
-            (end_pos - KEY_FILE_SIZE - VALUE_FILE_SIZE) as u64,
+            key_file_end - KEY_FILE_SIZE as u64,
         );
 
         let km = KeyManager::new(mmap_key, index, ventry);
 
-        let vm = ValueManager::new(mmap_buffer, buf_pos, direct_file, file_pos);
+        let vm = ValueManager::new(mmap_buffer, buf_pos, direct_file, value_pos);
 
-        Ok(Store { km, vm })
+        Ok(Store {
+            km,
+            vm,
+            key_file: key_file.as_ref().to_path_buf(),
+            buffer_file: buffer_file.as_ref().to_path_buf(),
+            value_file: value_file.as_ref().to_path_buf(),
+        })
     }
 
-    pub fn get(&self, key: InnerKey) -> Result<Option<InnerValue>, error::Error> {
+    pub fn get(&mut self, key: InnerKey) -> Result<Option<InnerValue>, error::Error> {
         let key = self.km.find(&key);
-        dbg!(&key);
+        // dbg!(&key);
         match key {
             None => return Ok(None),
             Some(k) => match self.vm.read(k.ventry)? {
@@ -102,7 +130,17 @@ impl Store {
 
         // Check should flush to disk or not
         if should_flush {
-            self.vm.flush();
+            // Flush to disk
+            let file_pos = self.vm.flush();
+            dbg!(file_pos);
+            // Check if need more space
+            if file_pos % VALUE_FILE_SIZE as u64 == 0 {
+                let new_store = Store::new(&self.key_file, &self.value_file, &self.buffer_file)?;
+                drop(&mut self.vm);
+                drop(&mut self.km);
+                self.vm = new_store.vm;
+                self.km = new_store.km;
+            }
         }
 
         Ok(())
@@ -112,30 +150,27 @@ impl Store {
         self.put(key, Value::Invalid)
     }
 
-    pub fn scan(&self) -> StoreIter {
+    pub fn scan(&mut self) -> StoreIter {
         StoreIter::new(self)
     }
 }
 
 pub struct ValueManager {
     buf: RwLock<MmapMut>,
-    buf_pos: usize,
+    buf_pos: u64,
     file: RwLock<DirectFile>,
-    file_pos: usize,
+    file_pos: u64,
+    cache: PageCache,
 }
 
 impl ValueManager {
-    pub fn new(
-        mmap_buffer: MmapMut,
-        buf_pos: usize,
-        direct_file: DirectFile,
-        file_pos: usize,
-    ) -> Self {
+    pub fn new(mmap_buffer: MmapMut, buf_pos: u64, direct_file: DirectFile, file_pos: u64) -> Self {
         ValueManager {
             buf: RwLock::new(mmap_buffer),
             buf_pos,
             file: RwLock::new(direct_file),
             file_pos,
+            cache: PageCache::new(),
         }
     }
 
@@ -148,50 +183,102 @@ impl ValueManager {
         let mut index = 0;
 
         while index < VALUE_SIZE {
-            wbuf[self.buf_pos + index] = buf[index];
+            wbuf[self.buf_pos as usize + index] = buf[index];
             index += 1;
         }
 
-        self.buf_pos += VALUE_SIZE;
+        self.buf_pos += VALUE_SIZE as u64;
 
-        Ok(self.buf_pos >= BUFFER_SIZE)
+        Ok(self.buf_pos >= BUFFER_SIZE as u64)
     }
 
-    pub fn flush(&mut self) {
+    pub fn flush(&mut self) -> u64 {
         // Do flush
         let mut wbuf = self.buf.write().unwrap();
         let wfile = self.file.write().unwrap();
-        // FIXME: content should be aligned in 4kb
+        // let mut data = Block4k { bytes: [0; 4096] };
+        // data.bytes.clone_from_slice(&wbuf);
         let bytes = wfile
             .pwrite(&wbuf, self.file_pos as u64)
             .expect("Failed to append to db file");
-        self.file_pos += bytes;
+        dbg!(bytes);
+        self.file_pos += bytes as u64;
 
         // Clear buffer
-        wbuf.copy_from_slice(&[0u8; VALUE_SIZE]);
+        wbuf.copy_from_slice(&[0u8; BUFFER_SIZE]);
         self.buf_pos = 0;
+        dbg!(self.file_pos);
+        self.file_pos
     }
 
-    pub fn read(&self, ventry: usize) -> Result<Value, error::Error> {
+    pub fn read(&mut self, ventry: usize) -> Result<Value, error::Error> {
         let mut offset = ventry * VALUE_SIZE;
-        let values_len = self.file_pos - KEY_FILE_SIZE - BUFFER_SIZE;
         dbg!(offset);
-        dbg!(values_len);
-        if offset > values_len + BUFFER_SIZE {
+        dbg!(self.file_pos);
+        if offset as u64 > self.file_pos + BUFFER_SIZE as u64 {
             return Err(error::Error::OutOfIndex);
-        } else if offset >= values_len {
+        } else if offset as u64 >= self.file_pos {
             let rbuf = self.buf.read().unwrap();
-            offset -= values_len;
+            offset -= self.file_pos as usize;
             let data = &rbuf[offset..offset + VALUE_SIZE];
             return Ok(value_from_bytes(data).unwrap());
         } else {
-            // Read from dio
-            let rfile = self.file.read().unwrap();
-            let mut data = [0; VALUE_SIZE];
-            let read = rfile.pread(&mut data, (offset + KEY_FILE_SIZE + BUFFER_SIZE) as u64);
-            dbg!(&read);
-            return Ok(value_from_bytes(&data).unwrap());
+            let v = self.cache.try_get(offset as u64, VALUE_SIZE as u64);
+            match v {
+                None => {
+                    // Read from dio
+                    let rfile = self.file.read().unwrap();
+                    let bytes = self
+                        .cache
+                        .try_load(&rfile, VALUE_SIZE as u64, offset as u64)?;
+                    return Ok(value_from_bytes(&bytes).unwrap());
+                }
+                Some(bytes) => {
+                    return Ok(value_from_bytes(&bytes).unwrap());
+                }
+            }
         }
+    }
+}
+
+struct PageCache {
+    cache: Block4k,
+    start: u64,
+    end: u64,
+}
+
+impl PageCache {
+    pub fn new() -> Self {
+        PageCache {
+            cache: Block4k { bytes: [0; 4096] },
+            start: 0,
+            end: 0,
+        }
+    }
+    pub fn try_load(
+        &mut self,
+        dio_file: &DirectFile,
+        len: u64,
+        offset: u64,
+    ) -> Result<Vec<u8>, error::Error> {
+        const PAGE_SIZE: u64 = 512;
+        const CACHE_SIZE: u64 = 4096;
+        let md = offset % PAGE_SIZE;
+        if len - md > CACHE_SIZE {
+            return Err(error::Error::CacheTooSmall);
+        }
+        let read = dio_file.pread(&mut self.cache.bytes, offset - md)?;
+        self.start = offset - md;
+        self.end = self.start + read;
+        let v = self.try_get(offset, len).unwrap();
+        Ok(v)
+    }
+    pub fn try_get(&self, offset: u64, len: u64) -> Option<Vec<u8>> {
+        if offset >= self.start && offset + len <= self.end {
+            let pos = (offset - self.start) as usize;
+            return Some(Vec::from(&self.cache.bytes[pos..pos + len as usize]));
+        }
+        None
     }
 }
 
@@ -213,7 +300,7 @@ impl KeyManager {
     pub fn find(&self, inner: &InnerKey) -> Option<Key> {
         let rindex = self.index.read().unwrap();
         let kentry = bsearch(&*rindex, &inner);
-        dbg!(&rindex);
+        // dbg!(&rindex);
         match kentry {
             None => None,
             Some(entry) => Some(rindex[entry].clone()),
@@ -233,9 +320,9 @@ impl KeyManager {
 
         // Update index
         let (found, pos) = find_insert_point(&windex, key);
-        dbg!(&found);
-        dbg!(&pos);
-        dbg!(windex.len());
+        // dbg!(&found);
+        // dbg!(&pos);
+        // dbg!(windex.len());
         if pos == windex.len() {
             windex.push(new_key);
         } else {

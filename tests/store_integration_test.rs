@@ -5,18 +5,23 @@ mod store_integration_test {
     use std::path::PathBuf;
     use tempfile::tempdir;
 
-    fn tmpfile(name: &str) -> PathBuf {
+    fn tmpfile(name: &str) -> (PathBuf, PathBuf, PathBuf) {
         let tmp = tempdir().unwrap();
-        let mut path = tmp.into_path();
-        path.push(name);
-        path
+        let path = tmp.into_path();
+        let mut key = path.clone();
+        let mut value = path.clone();
+        let mut buffer = path.clone();
+        key.push(format!("{}.key", name));
+        value.push(format!("{}.value", name));
+        buffer.push(format!("{}.buffer", name));
+        (key, value, buffer)
     }
 
     #[test]
     fn store_put_get() {
-        let tmpfile = tmpfile("test");
+        let (k, v, b) = tmpfile("test_store_put_get");
         {
-            let mut db = store::Store::new(&tmpfile).unwrap();
+            let mut db = store::Store::new(&k, &v, &b).unwrap();
             let kvs = vec![
                 ("key00", "value00"),
                 ("key02", "value02"),
@@ -25,17 +30,19 @@ mod store_integration_test {
                 ("key05", "value05"),
                 ("key04", "value04"),
             ];
-            for kv in kvs {
-                db.put(
-                    kv.0.parse().unwrap(),
-                    kv::Value::Valid(kv.1.parse().unwrap()),
-                )
-                .unwrap();
+            for _ in 0..200 {
+                for kv in &kvs {
+                    db.put(
+                        kv.0.parse().unwrap(),
+                        kv::Value::Valid(kv.1.parse().unwrap()),
+                    )
+                    .unwrap();
+                }
             }
         }
         {
             // Restore from file
-            let db = store::Store::new(&tmpfile).unwrap();
+            let mut db = store::Store::new(&k, &v, &b).unwrap();
 
             for i in 0..=5 {
                 let v = db
@@ -49,8 +56,8 @@ mod store_integration_test {
 
     #[test]
     fn store_delete() {
-        let tmpfile = tmpfile("test");
-        let mut db = store::Store::new(&tmpfile).unwrap();
+        let (k, v, b) = tmpfile("test_store_put_get");
+        let mut db = store::Store::new(&k, &v, &b).unwrap();
         let kvs = vec![
             ("key00", "value00"),
             ("key02", "value02"),
@@ -80,8 +87,8 @@ mod store_integration_test {
 
     #[test]
     fn store_scan() {
-        let tmpfile = tmpfile("test");
-        let mut db = store::Store::new(&tmpfile).unwrap();
+        let (k, v, b) = tmpfile("test_store_put_get");
+        let mut db = store::Store::new(&k, &v, &b).unwrap();
         let kvs = vec![
             ("key00", "value00"),
             ("key02", "value02"),

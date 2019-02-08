@@ -11,6 +11,7 @@ pub enum Error {
     OutOfIndex,
     // For build value from [u8]
     InvalidValueSize,
+    CacheTooSmall,
     IoError(io::Error),
 }
 
@@ -33,6 +34,7 @@ impl Debug for Error {
             Error::WrongAlignment => write!(f, "Alignment error"),
             Error::OutOfIndex => write!(f, "Read out of index"),
             Error::InvalidValueSize => write!(f, "Invalid value size"),
+            Error::CacheTooSmall => write!(f, "Cache too small"),
             Error::IoError(err) => write!(f, "{:?}", err),
         }
     }
@@ -45,6 +47,7 @@ impl Display for Error {
             Error::WrongAlignment => write!(f, "Alignment error"),
             Error::OutOfIndex => write!(f, "Read out of index"),
             Error::InvalidValueSize => write!(f, "Invalid value size"),
+            Error::CacheTooSmall => write!(f, "Cache too small"),
             Error::IoError(err) => write!(f, "{}", err),
         }
     }
@@ -56,6 +59,7 @@ impl From<Error> for io::Error {
             Error::ContentExceed => io::Error::new(io::ErrorKind::Other, "Content too long"),
             Error::WrongAlignment => io::Error::new(io::ErrorKind::Other, "Alignment error"),
             Error::OutOfIndex => io::Error::new(io::ErrorKind::Other, "Read out of index"),
+            Error::CacheTooSmall => io::Error::new(io::ErrorKind::Other, "Cache too small"),
             Error::InvalidValueSize => io::Error::new(io::ErrorKind::Other, "Invalid value size"),
             Error::IoError(err) => err,
         }
