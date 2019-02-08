@@ -58,15 +58,12 @@ impl Store {
         buffer_file: P,
     ) -> Result<Self, error::Error> {
         let key_pos = util::ensure_size(&key_file, KEY_FILE_SIZE as u64, KEY_SIZE as u64)?;
-        dbg!(key_pos);
         util::ensure_size(&value_file, VALUE_FILE_SIZE as u64, VALUE_SIZE as u64)?;
         // FIXME: Corner case
         let buffer_pos = util::ensure_size(&buffer_file, BUFFER_SIZE as u64, VALUE_SIZE as u64)?;
-        dbg!(buffer_pos);
 
         let value_pos =
             (key_pos / MKEY_SIZE as u64 - buffer_pos / VALUE_SIZE as u64) * VALUE_SIZE as u64;
-        dbg!(value_pos);
         Store::init(&key_file, &value_file, &buffer_file, value_pos)
     }
 
@@ -79,10 +76,9 @@ impl Store {
         // Init buffer(mmap)
         let mmap_buffer = get_rw_mmap_fd(&buffer_file, BUFFER_SIZE, 0);
         let buf_pos = util::get_buffer_pos(&mmap_buffer)?;
-        dbg!(buf_pos);
 
         // Get values(dio) handle
-        let direct_file = DirectFile::open(&value_file, Mode::Append, FileAccess::ReadWrite, 4096)?;
+        let direct_file = DirectFile::open(&value_file, Mode::Open, FileAccess::ReadWrite, 4096)?;
 
         // Build index
         let key_file_end = util::get_file_size(&key_file)?;
@@ -111,7 +107,6 @@ impl Store {
 
     pub fn get(&mut self, key: InnerKey) -> Result<Option<InnerValue>, error::Error> {
         let key = self.km.find(&key);
-        // dbg!(&key);
         match key {
             None => return Ok(None),
             Some(k) => match self.vm.read(k.ventry)? {
@@ -132,7 +127,6 @@ impl Store {
         if should_flush {
             // Flush to disk
             let file_pos = self.vm.flush();
-            dbg!(file_pos);
             // Check if need more space
             if file_pos % VALUE_FILE_SIZE as u64 == 0 {
                 let new_store = Store::new(&self.key_file, &self.value_file, &self.buffer_file)?;
@@ -201,20 +195,16 @@ impl ValueManager {
         let bytes = wfile
             .pwrite(&wbuf, self.file_pos as u64)
             .expect("Failed to append to db file");
-        dbg!(bytes);
         self.file_pos += bytes as u64;
 
         // Clear buffer
         wbuf.copy_from_slice(&[0u8; BUFFER_SIZE]);
         self.buf_pos = 0;
-        dbg!(self.file_pos);
         self.file_pos
     }
 
     pub fn read(&mut self, ventry: usize) -> Result<Value, error::Error> {
         let mut offset = ventry * VALUE_SIZE;
-        dbg!(offset);
-        dbg!(self.file_pos);
         if offset as u64 > self.file_pos + BUFFER_SIZE as u64 {
             return Err(error::Error::OutOfIndex);
         } else if offset as u64 >= self.file_pos {
@@ -300,7 +290,6 @@ impl KeyManager {
     pub fn find(&self, inner: &InnerKey) -> Option<Key> {
         let rindex = self.index.read().unwrap();
         let kentry = bsearch(&*rindex, &inner);
-        // dbg!(&rindex);
         match kentry {
             None => None,
             Some(entry) => Some(rindex[entry].clone()),
@@ -320,9 +309,7 @@ impl KeyManager {
 
         // Update index
         let (found, pos) = find_insert_point(&windex, key);
-        // dbg!(&found);
-        // dbg!(&pos);
-        // dbg!(windex.len());
+
         if pos == windex.len() {
             windex.push(new_key);
         } else {

@@ -131,13 +131,11 @@ pub fn build_index<P: AsRef<Path>>(path: P, start: u64, end: u64) -> Result<Vec<
     for pos in (start..end).step_by(KEY_FILE_SIZE + VALUE_FILE_SIZE) {
         // For each chunk
         let mut mkey = vec![0; KEY_FILE_SIZE];
-        dbg!(pos);
         reader.seek(SeekFrom::Start(pos as u64))?;
         reader.read_exact(&mut mkey)?;
         for x in (0..mkey.len()).step_by(MKEY_SIZE) {
             let chunk = &mkey[x..x + MKEY_SIZE];
             if chunk == [0; MKEY_SIZE] {
-                dbg!(format!("empty chunk detected at {}", x));
                 break;
             }
             let mut inner_key = InnerKey { raw: [0; KEY_SIZE] };
@@ -168,11 +166,9 @@ pub fn get_buffer_pos(buffer: &[u8]) -> Result<u64, Error> {
         return Err(Error::WrongAlignment);
     }
     let mut pos = 0;
-    dbg!(buffer.len());
     while pos < buffer.len() {
         let chunk = &buffer[pos..pos + VALUE_SIZE];
         if chunk[..] == [0; VALUE_SIZE][..] {
-            println!("position found");
             break;
         }
         pos += VALUE_SIZE;
@@ -207,7 +203,7 @@ pub fn ensure_size<P: AsRef<Path>>(path: P, chunk_size: u64, item_size: u64) -> 
                 if buf[..] != vec![0; item_size as usize][..] {
                     // Full
                     f.set_len(len + chunk_size)?;
-                    return Ok(len + chunk_size);
+                    return Ok(len);
                 }
                 let pos = find_last_pos(&mut reader, len, chunk_size, item_size)?;
                 return Ok(pos);
@@ -230,7 +226,7 @@ fn find_last_pos<R: Read + Seek>(
     for i in (0..chunk_size as usize).step_by(item_size as usize) {
         let chunk = &buf[i..i + item_size as usize];
         if chunk[..] == vec![0; item_size as usize][..] {
-            return Ok(i as u64);
+            return Ok(i as u64 + pos);
         }
     }
     unreachable!();
@@ -268,7 +264,6 @@ mod util_tests {
                     });
                 }
                 let result = bsearch(&index, &case.1.parse().unwrap());
-                dbg!(result);
                 assert_eq!(result, case.2);
             }
         }
@@ -297,7 +292,6 @@ mod util_tests {
                     });
                 }
                 let result = find_insert_point(&index, &case.1.parse().unwrap());
-                dbg!(result);
                 assert_eq!(result, case.2);
             }
         }
@@ -326,7 +320,6 @@ mod util_tests {
             let tmp_path = tmp_path("broken_test");
             File::create(&tmp_path).unwrap();
             let index = build_index(&tmp_path, 0, 11);
-            dbg!(&index);
             assert!(index.is_err());
         }
 
@@ -343,10 +336,8 @@ mod util_tests {
             f.write(&data).unwrap();
             f.write(&vec![0; KEY_FILE_SIZE - data.len()]).unwrap();
             let index = build_index(&tmp_path, 0, KEY_FILE_SIZE as u64).unwrap();
-            dbg!(&index);
             // ventry should be ordered as: 1, 2, 0, 3
             let entries: Vec<usize> = index.iter().map(|key| key.ventry).collect();
-            dbg!(&entries);
             assert_eq!(entries, [1, 2, 0, 3]);
         }
     }

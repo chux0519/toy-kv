@@ -30,7 +30,7 @@ mod store_integration_test {
                 ("key05", "value05"),
                 ("key04", "value04"),
             ];
-            for _ in 0..200 {
+            for _ in 0..3 {
                 for kv in &kvs {
                     db.put(
                         kv.0.parse().unwrap(),
@@ -112,6 +112,30 @@ mod store_integration_test {
         }
         let res = iter.next();
         assert!(res.is_none());
+    }
+
+    #[test]
+    fn store_to_grow() {
+        let (k, v, b) = tmpfile("test_store_put_get");
+        {
+            let mut db = store::Store::new(&k, &v, &b).unwrap();
+            for _ in 0..65536 {
+                db.put(
+                    "key00".parse().unwrap(),
+                    kv::Value::Valid("value00".parse().unwrap()),
+                )
+                .unwrap();
+            }
+        }
+
+        {
+            // Restore from file
+            let mut db = store::Store::new(&k, &v, &b).unwrap();
+            for _ in 0..65536 {
+                let v = db.get("key00".parse().unwrap()).unwrap().unwrap();
+                assert_eq!(v.to_string(), "value00");
+            }
+        }
     }
 }
 // TODO: concurrent tests

@@ -67,9 +67,6 @@ impl DirectFile {
         }) {
             -1 => Err(io::Error::last_os_error()),
             fd => {
-                dbg!(fd);
-                dbg!(flags);
-                dbg!(mode);
                 return Ok(DirectFile {
                     fd: fd as i32,
                     alignment: alignment,
@@ -100,9 +97,6 @@ impl DirectFile {
     }
 
     pub fn pwrite(&self, buf: &[u8], off: u64) -> io::Result<usize> {
-        dbg!(self.fd);
-        dbg!(buf.len());
-        dbg!(off);
         let r = unsafe {
             ::libc::pwrite(
                 self.fd,
@@ -152,7 +146,6 @@ mod test {
         let wfile = lock.write().unwrap();
         let data = Block4k { bytes: [0; 4096] };
         let res = wfile.pwrite(&data.bytes, 0);
-        dbg!(&res);
         assert!(res.is_ok());
     }
 }
