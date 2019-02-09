@@ -15,6 +15,21 @@ path = "example/server.rs"
 [dependencies]
 memmap = "0.7.0"
 libc = "0.2"
+num_cpus = "1.0"
+
+actix = "0.7"
+rand = "0.3"
+bytes = "0.4"
+byteorder = "1.1"
+futures = "0.1"
+tokio = "0.1"
+tokio-codec = "0.1"
+tokio-io = "0.1"
+tokio-tcp = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+time = "*"
 
 [dev-dependencies]
 tempfile = "3"
