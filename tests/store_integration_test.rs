@@ -117,7 +117,7 @@ mod store_integration_test {
     use time::PreciseTime;
     #[test]
     fn store_to_grow() {
-        let (k, v, b) = tmpfile("test_store_put_get");
+        let (k, v, b) = tmpfile("test_store_to_grow");
         {
             let mut db = store::Store::new(&k, &v, &b).unwrap();
             let start = PreciseTime::now();
