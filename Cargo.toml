@@ -12,13 +12,21 @@ path = "example/client.rs"
 name = "server"
 path = "example/server.rs"
 
+[[bin]]
+name = "random_write_bench"
+path = "benchmark/random_write.rs"
+
+[[bin]]
+name = "sequential_write_bench"
+path = "benchmark/sequential_write.rs"
+
 [dependencies]
 memmap = "0.7.0"
 libc = "0.2"
 num_cpus = "1.0"
 
 actix = "0.7"
-rand = "0.3"
+rand = "0.6"
 bytes = "0.4"
 byteorder = "1.1"
 futures = "0.1"
@@ -30,6 +38,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 time = "*"
-
-[dev-dependencies]
 tempfile = "3"

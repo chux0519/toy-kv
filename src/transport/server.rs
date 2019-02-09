@@ -3,7 +3,7 @@
 //! room through `ToyServer`.
 
 use actix::prelude::*;
-use rand::{self, Rng};
+use rand::prelude::*;
 use std::collections::HashMap;
 
 use super::super::engine::error;
