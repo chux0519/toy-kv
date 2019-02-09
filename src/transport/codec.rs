@@ -29,7 +29,7 @@ pub enum ToyResponse {
     /// Value of key
     Value(String),
     /// Saved key
-    Saved(String),
+    Saved((String, String)),
     /// Deleted key
     Deleted(String),
     /// Scan

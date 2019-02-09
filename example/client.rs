@@ -135,13 +135,17 @@ impl StreamHandler<codec::ToyResponse, io::Error> for ToyClient {
     fn handle(&mut self, msg: codec::ToyResponse, _: &mut Context<Self>) {
         match msg {
             codec::ToyResponse::Value(ref msg) => {
-                println!("value: {}", msg);
+                if msg.is_empty() {
+                    println!("not found");
+                } else {
+                    println!("{}", msg);
+                }
             }
             codec::ToyResponse::Saved(ref msg) => {
-                println!("saved: {}", msg);
+                println!("({}, {}) saved", msg.0, msg.1);
             }
             codec::ToyResponse::Deleted(ref msg) => {
-                println!("deleted: {}", msg);
+                println!("key({}) deleted", msg);
             }
             codec::ToyResponse::Next(ref msg) => {
                 println!("({}, {})", msg.0, msg.1);

@@ -6,6 +6,7 @@ use actix::prelude::*;
 use rand::{self, Rng};
 use std::collections::HashMap;
 
+use super::super::engine::error;
 use super::super::engine::kv;
 use super::super::engine::store::Store;
 use super::open_db_from;
@@ -43,11 +44,10 @@ pub struct Get {
 }
 
 impl actix::Message for Get {
-    type Result = String;
+    type Result = Result<String, error::Error>;
 }
 
 /// Put kv pair
-#[derive(Message)]
 pub struct Put {
     /// Client id
     pub id: usize,
@@ -55,12 +55,19 @@ pub struct Put {
     pub value: String,
 }
 
-/// Delete kek
-#[derive(Message)]
+impl actix::Message for Put {
+    type Result = Result<(), error::Error>;
+}
+
+/// Delete key
 pub struct Delete {
     /// Client id
     pub id: usize,
     pub key: String,
+}
+
+impl actix::Message for Delete {
+    type Result = Result<(), error::Error>;
 }
 
 /// `ToyServer` manages toy rooms and responsible for coordinating toy
@@ -117,40 +124,43 @@ impl Handler<Disconnect> for ToyServer {
 
 /// Get value of key
 impl Handler<Get> for ToyServer {
-    type Result = String;
+    type Result = Result<String, error::Error>;
 
     fn handle(&mut self, msg: Get, _: &mut Context<Self>) -> Self::Result {
         let Get { id, key } = msg;
-        let value = self.store.get(key.parse().unwrap()).unwrap();
+        println!("client({}) get {}", id, key);
+        let value = self.store.get(key.parse().unwrap())?;
         match value {
-            None => "".to_owned(),
-            Some(v) => v.to_string(),
+            None => Ok("".to_owned()),
+            Some(v) => Ok(v.to_string()),
         }
     }
 }
 
 /// Put kv pair
 impl Handler<Put> for ToyServer {
-    type Result = ();
+    type Result = Result<(), error::Error>;
 
-    fn handle(&mut self, msg: Put, _: &mut Context<Self>) {
+    fn handle(&mut self, msg: Put, _: &mut Context<Self>) -> Self::Result {
         let Put { id, key, value } = msg;
-        self.store
-            .put(
-                key.parse().unwrap(),
-                kv::Value::Valid(Box::new(value.parse().unwrap())),
-            )
-            .unwrap();
+        println!("client({}) put ({}, {})", id, key, value);
+        self.store.put(
+            key.parse().unwrap(),
+            kv::Value::Valid(Box::new(value.parse().unwrap())),
+        )?;
+        Ok(())
     }
 }
 
 /// Delete value of key
 impl Handler<Delete> for ToyServer {
-    type Result = ();
+    type Result = Result<(), error::Error>;
 
-    fn handle(&mut self, msg: Delete, _: &mut Context<Self>) {
+    fn handle(&mut self, msg: Delete, _: &mut Context<Self>) -> Self::Result {
         let Delete { id, key } = msg;
-        self.store.delete(key.parse().unwrap()).unwrap();
+        println!("client({}) delete {}", id, key);
+        self.store.delete(key.parse().unwrap())?;
+        Ok(())
     }
 }
 
@@ -160,7 +170,7 @@ impl Handler<Scan> for ToyServer {
 
     fn handle(&mut self, msg: Scan, _: &mut Context<Self>) {
         let id = msg.0;
-        let addr = self.sessions.get(&id).unwrap();
+        let addr = &self.sessions[&id];
         for (k, v) in self.store.scan() {
             addr.do_send(session::Next {
                 key: k.to_string(),

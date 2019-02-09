@@ -70,7 +70,6 @@ impl StreamHandler<ToyRequest, io::Error> for ToySession {
     fn handle(&mut self, msg: ToyRequest, ctx: &mut Self::Context) {
         match msg {
             ToyRequest::Get(key) => {
-                println!("try get: {}", key);
                 self.addr
                     .send(server::Get {
                         id: self.id,
@@ -79,15 +78,17 @@ impl StreamHandler<ToyRequest, io::Error> for ToySession {
                     .into_actor(self) // <- create actor compatible future
                     .then(|res, act, _| {
                         match res {
-                            Ok(value) => act.framed.write(ToyResponse::Value(value)),
-                            _ => act.framed.write(ToyResponse::Value("".to_owned())),
+                            Ok(value_result) => match value_result {
+                                Ok(value) => act.framed.write(ToyResponse::Value(value)),
+                                Err(e) => eprintln!("{}", e),
+                            },
+                            _ => eprintln!("Can not connect to toy server"),
                         }
                         actix::fut::ok(())
                     })
                     .wait(ctx)
             }
             ToyRequest::Put((k, v)) => {
-                println!("try put: {}, {}", k, v);
                 self.addr
                     .send(server::Put {
                         id: self.id,
@@ -97,16 +98,19 @@ impl StreamHandler<ToyRequest, io::Error> for ToySession {
                     .into_actor(self) // <- create actor compatible future
                     .then(move |res, act, _| {
                         match res {
-                            Ok(_) => act.framed.write(ToyResponse::Saved(k.clone())),
-                            // TODO: using error
-                            _ => println!("Failed to save key: {}", k.clone()),
+                            Ok(put_result) => match put_result {
+                                Ok(_) => {
+                                    act.framed.write(ToyResponse::Saved((k.clone(), v.clone())))
+                                }
+                                Err(e) => eprintln!("{}", e),
+                            },
+                            _ => eprintln!("Can not connect to toy server"),
                         }
                         actix::fut::ok(())
                     })
                     .wait(ctx)
             }
             ToyRequest::Delete(k) => {
-                println!("try delete: {}", k);
                 self.addr
                     .send(server::Delete {
                         id: self.id,
@@ -115,9 +119,12 @@ impl StreamHandler<ToyRequest, io::Error> for ToySession {
                     .into_actor(self) // <- create actor compatible future
                     .then(move |res, act, _| {
                         match res {
-                            Ok(_) => act.framed.write(ToyResponse::Deleted(k.clone())),
-                            // TODO: using error
-                            _ => println!("Failed to delete key: {}", k.clone()),
+                            Ok(delete_res) => match delete_res {
+                                Ok(_) => act.framed.write(ToyResponse::Deleted(k.clone())),
+
+                                Err(e) => eprintln!("{}", e),
+                            },
+                            _ => eprintln!("Can not connect to toy server"),
                         }
                         actix::fut::ok(())
                     })
