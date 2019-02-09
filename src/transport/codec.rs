@@ -1,11 +1,11 @@
 #![allow(dead_code)]
+use actix::prelude::*;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json as json;
 use std::io;
 use tokio_io::codec::{Decoder, Encoder};
-use actix::prelude::*;
 
 /// Client request
 #[derive(Serialize, Deserialize, Debug, Message)]
@@ -14,8 +14,10 @@ pub enum ToyRequest {
     Scan,
     /// Get the value of key
     Get(String),
-    /// Send message
-    Message(String),
+    /// Put kv pair
+    Put((String, String)),
+    /// Delte the value of key
+    Delete(String),
     /// Ping
     Ping,
 }
@@ -24,15 +26,12 @@ pub enum ToyRequest {
 #[derive(Serialize, Deserialize, Debug, Message)]
 pub enum ToyResponse {
     Ping,
-
-    /// Scan of rooms
-    Rooms(Vec<String>),
-
-    /// Joined
-    Joined(String),
-
-    /// Message
-    Message(String),
+    /// Value of key
+    Value(String),
+    /// Saved key
+    Saved(String),
+    /// Deleted key
+    Deleted(String),
 }
 
 /// Codec for Client -> Server transport
@@ -64,9 +63,7 @@ impl Encoder for ToyServerCodec {
     type Item = ToyResponse;
     type Error = io::Error;
 
-    fn encode(
-        &mut self, msg: ToyResponse, dst: &mut BytesMut,
-    ) -> Result<(), Self::Error> {
+    fn encode(&mut self, msg: ToyResponse, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let msg = json::to_string(&msg).unwrap();
         let msg_ref: &[u8] = msg.as_ref();
 
@@ -107,9 +104,7 @@ impl Encoder for ToyClientCodec {
     type Item = ToyRequest;
     type Error = io::Error;
 
-    fn encode(
-        &mut self, msg: ToyRequest, dst: &mut BytesMut,
-    ) -> Result<(), Self::Error> {
+    fn encode(&mut self, msg: ToyRequest, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let msg = json::to_string(&msg).unwrap();
         let msg_ref: &[u8] = msg.as_ref();
 

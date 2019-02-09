@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use tokio_io::io::WriteHalf;
 use tokio_tcp::TcpStream;
 
-use super::codec::{ToyServerCodec, ToyRequest, ToyResponse};
+use super::codec::{ToyRequest, ToyResponse, ToyServerCodec};
 use super::server::{self, ToyServer};
 
 /// Toy server sends this messages to session
@@ -22,8 +22,6 @@ pub struct ToySession {
     /// Client must send ping at least once per 10 seconds, otherwise we drop
     /// connection.
     hb: Instant,
-    /// joined room
-    room: String,
     /// Framed wrapper
     framed: actix::io::FramedWrite<WriteHalf<TcpStream>, ToyServerCodec>,
 }
@@ -68,53 +66,65 @@ impl StreamHandler<ToyRequest, io::Error> for ToySession {
     /// This is main event loop for client requests
     fn handle(&mut self, msg: ToyRequest, ctx: &mut Self::Context) {
         match msg {
-            ToyRequest::Scan => {
-                // Send ListRooms message to toy server and wait for response
-                println!("Scan rooms");
-                self.addr.send(server::ListRooms)
-                    .into_actor(self)     // <- create actor compatible future
+            ToyRequest::Get(key) => {
+                println!("try get: {}", key);
+                self.addr
+                    .send(server::Get {
+                        id: self.id,
+                        key: key.clone(),
+                    })
+                    .into_actor(self) // <- create actor compatible future
                     .then(|res, act, _| {
                         match res {
-                            Ok(rooms) => act.framed.write(ToyResponse::Rooms(rooms)),
-                            _ => println!("Something is wrong"),
+                            Ok(value) => act.framed.write(ToyResponse::Value(value)),
+                            _ => act.framed.write(ToyResponse::Value("".to_owned())),
                         }
                         actix::fut::ok(())
-                    }).wait(ctx)
-                // .wait(ctx) pauses all events in context,
-                // so actor wont receive any new messages until it get list of rooms back
+                    })
+                    .wait(ctx)
             }
-            ToyRequest::Get(name) => {
-                println!("Get to room: {}", name);
-                self.room = name.clone();
-                self.addr.do_send(server::Get {
-                    id: self.id,
-                    name: name.clone(),
-                });
-                self.framed.write(ToyResponse::Joined(name));
+            ToyRequest::Put((k, v)) => {
+                println!("try put: {}, {}", k, v);
+                self.addr
+                    .send(server::Put {
+                        id: self.id,
+                        key: k.clone(),
+                        value: v.clone(),
+                    })
+                    .into_actor(self) // <- create actor compatible future
+                    .then(move |res, act, _| {
+                        match res {
+                            Ok(_) => act.framed.write(ToyResponse::Saved(k.clone())),
+                            // TODO: using error
+                            _ => println!("Failed to save key: {}", k.clone()),
+                        }
+                        actix::fut::ok(())
+                    })
+                    .wait(ctx)
+            },
+            ToyRequest::Delete(k) => {
+                println!("try delete: {}", k);
+                self.addr
+                    .send(server::Delete {
+                        id: self.id,
+                        key: k.clone()
+                    })
+                    .into_actor(self) // <- create actor compatible future
+                    .then(move |res, act, _| {
+                        match res {
+                            Ok(_) => act.framed.write(ToyResponse::Deleted(k.clone())),
+                            // TODO: using error
+                            _ => println!("Failed to delete key: {}", k.clone()),
+                        }
+                        actix::fut::ok(())
+                    })
+                    .wait(ctx)
             }
-            ToyRequest::Message(message) => {
-                // send message to toy server
-                println!("Peer message: {}", message);
-                self.addr.do_send(server::Message {
-                    id: self.id,
-                    msg: message,
-                    room: self.room.clone(),
-                })
-            }
+
             // we update heartbeat time on ping from peer
             ToyRequest::Ping => self.hb = Instant::now(),
+            _ => {}
         }
-    }
-}
-
-/// Handler for Message, toy server sends this message, we just send string to
-/// peer
-impl Handler<Message> for ToySession {
-    type Result = ();
-
-    fn handle(&mut self, msg: Message, _: &mut Self::Context) {
-        // send message to peer
-        self.framed.write(ToyResponse::Message(msg.0));
     }
 }
 
@@ -129,7 +139,6 @@ impl ToySession {
             framed,
             id: 0,
             hb: Instant::now(),
-            room: "Main".to_owned(),
         }
     }
 

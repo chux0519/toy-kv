@@ -4,11 +4,13 @@
 
 use actix::prelude::*;
 use rand::{self, Rng};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
+use super::super::engine::kv;
+use super::super::engine::store::Store;
+use super::open_db_from;
 use super::session;
-
-/// Message for toy server communications
+use std::path::PathBuf;
 
 /// New toy session is created
 pub struct Connect {
@@ -28,64 +30,48 @@ pub struct Disconnect {
     pub id: usize,
 }
 
-/// Send message to specific room
-#[derive(Message)]
-pub struct Message {
-    /// Id of the client session
-    pub id: usize,
-    /// Peer message
-    pub msg: String,
-    /// Room name
-    pub room: String,
-}
-
-/// Scan of available rooms
-pub struct ListRooms;
-
-impl actix::Message for ListRooms {
-    type Result = Vec<String>;
-}
-
-/// Get room, if room does not exists create new one.
-#[derive(Message)]
+/// Get value of key
 pub struct Get {
     /// Client id
     pub id: usize,
     /// Room name
-    pub name: String,
+    pub key: String,
+}
+
+impl actix::Message for Get {
+    type Result = String;
+}
+
+/// Put kv pair
+#[derive(Message)]
+pub struct Put {
+    /// Client id
+    pub id: usize,
+    pub key: String,
+    pub value: String,
+}
+
+/// Delete kek
+#[derive(Message)]
+pub struct Delete {
+    /// Client id
+    pub id: usize,
+    pub key: String,
 }
 
 /// `ToyServer` manages toy rooms and responsible for coordinating toy
 /// session. implementation is super primitive
 pub struct ToyServer {
     sessions: HashMap<usize, Addr<session::ToySession>>,
-    rooms: HashMap<String, HashSet<usize>>,
+    store: Store,
 }
 
 impl Default for ToyServer {
     fn default() -> ToyServer {
-        // default room
-        let mut rooms = HashMap::new();
-        rooms.insert("Main".to_owned(), HashSet::new());
-
+        let db_path: PathBuf = "toydb".parse().unwrap();
         ToyServer {
-            rooms,
             sessions: HashMap::new(),
-        }
-    }
-}
-
-impl ToyServer {
-    /// Send message to all users in the room
-    fn send_message(&self, room: &str, message: &str, skip_id: usize) {
-        if let Some(sessions) = self.rooms.get(room) {
-            for id in sessions {
-                if *id != skip_id {
-                    if let Some(addr) = self.sessions.get(id) {
-                        addr.do_send(session::Message(message.to_owned()))
-                    }
-                }
-            }
+            store: open_db_from(&db_path).unwrap(),
         }
     }
 }
@@ -104,18 +90,10 @@ impl Handler<Connect> for ToyServer {
     type Result = usize;
 
     fn handle(&mut self, msg: Connect, _: &mut Context<Self>) -> Self::Result {
-        println!("Someone joined");
-
-        // notify all users in same room
-        self.send_message(&"Main".to_owned(), "Someone joined", 0);
-
         // register session with random id
         let id = rand::thread_rng().gen::<usize>();
         self.sessions.insert(id, msg.addr);
-
-        // auto join session to Main room
-        self.rooms.get_mut(&"Main".to_owned()).unwrap().insert(id);
-
+        println!("client({}) connected", id);
         // send id back
         id
     }
@@ -126,74 +104,48 @@ impl Handler<Disconnect> for ToyServer {
     type Result = ();
 
     fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) {
-        println!("Someone disconnected");
-
-        let mut rooms: Vec<String> = Vec::new();
+        println!("client({}) disconnected", &msg.id);
 
         // remove address
-        if self.sessions.remove(&msg.id).is_some() {
-            // remove session from all rooms
-            for (name, sessions) in &mut self.rooms {
-                if sessions.remove(&msg.id) {
-                    rooms.push(name.to_owned());
-                }
-            }
-        }
-        // send message to other users
-        for room in rooms {
-            self.send_message(&room, "Someone disconnected", 0);
-        }
+        self.sessions.remove(&msg.id);
     }
 }
 
-/// Handler for Message message.
-impl Handler<Message> for ToyServer {
-    type Result = ();
-
-    fn handle(&mut self, msg: Message, _: &mut Context<Self>) {
-        self.send_message(&msg.room, msg.msg.as_str(), msg.id);
-    }
-}
-
-/// Handler for `ListRooms` message.
-impl Handler<ListRooms> for ToyServer {
-    type Result = MessageResult<ListRooms>;
-
-    fn handle(&mut self, _: ListRooms, _: &mut Context<Self>) -> Self::Result {
-        let mut rooms = Vec::new();
-
-        for key in self.rooms.keys() {
-            rooms.push(key.to_owned())
-        }
-
-        MessageResult(rooms)
-    }
-}
-
-/// Get room, send disconnect message to old room
-/// send join message to new room
+/// Get value of key
 impl Handler<Get> for ToyServer {
+    type Result = String;
+
+    fn handle(&mut self, msg: Get, _: &mut Context<Self>) -> Self::Result {
+        let Get { id, key } = msg;
+        let value = self.store.get(key.parse().unwrap()).unwrap();
+        match value {
+            None => "".to_owned(),
+            Some(v) => v.to_string(),
+        }
+    }
+}
+
+/// Put kv pair
+impl Handler<Put> for ToyServer {
     type Result = ();
 
-    fn handle(&mut self, msg: Get, _: &mut Context<Self>) {
-        let Get { id, name } = msg;
-        let mut rooms = Vec::new();
+    fn handle(&mut self, msg: Put, _: &mut Context<Self>) {
+        let Put { id, key, value } = msg;
+        self.store
+            .put(
+                key.parse().unwrap(),
+                kv::Value::Valid(Box::new(value.parse().unwrap())),
+            )
+            .unwrap();
+    }
+}
 
-        // remove session from all rooms
-        for (n, sessions) in &mut self.rooms {
-            if sessions.remove(&id) {
-                rooms.push(n.to_owned());
-            }
-        }
-        // send message to other users
-        for room in rooms {
-            self.send_message(&room, "Someone disconnected", 0);
-        }
+/// Delete value of key
+impl Handler<Delete> for ToyServer {
+    type Result = ();
 
-        if self.rooms.get_mut(&name).is_none() {
-            self.rooms.insert(name.clone(), HashSet::new());
-        }
-        self.send_message(&name, "Someone connected", id);
-        self.rooms.get_mut(&name).unwrap().insert(id);
+    fn handle(&mut self, msg: Delete, _: &mut Context<Self>) {
+        let Delete { id, key } = msg;
+        self.store.delete(key.parse().unwrap()).unwrap();
     }
 }

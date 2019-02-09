@@ -57,7 +57,7 @@ impl Store {
         value_file: P,
         buffer_file: P,
     ) -> Result<Self, error::Error> {
-        let key_pos = util::ensure_size(&key_file, KEY_FILE_SIZE as u64, KEY_SIZE as u64)?;
+        let key_pos = util::ensure_size(&key_file, KEY_FILE_SIZE as u64, MKEY_SIZE as u64)?;
         util::ensure_size(&value_file, VALUE_FILE_SIZE as u64, VALUE_SIZE as u64)?;
         // FIXME: Corner case
         let buffer_pos = util::ensure_size(&buffer_file, BUFFER_SIZE as u64, VALUE_SIZE as u64)?;

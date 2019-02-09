@@ -24,11 +24,7 @@ fn main() {
                         let (r, w) = stream.split();
                         ctx.add_stream(FramedRead::new(r, codec::ToyClientCodec));
                         ToyClient {
-                            framed: actix::io::FramedWrite::new(
-                                w,
-                                codec::ToyClientCodec,
-                                ctx,
-                            ),
+                            framed: actix::io::FramedWrite::new(w, codec::ToyClientCodec, ctx),
                         }
                     });
 
@@ -98,22 +94,38 @@ impl Handler<ClientCommand> for ToyClient {
 
         // we check for /sss type of messages
         if m.starts_with('/') {
-            let v: Vec<&str> = m.splitn(2, ' ').collect();
+            let v: Vec<&str> = m.split(' ').collect();
             match v[0] {
-                "/list" => {
+                "/scan" => {
                     self.framed.write(codec::ToyRequest::Scan);
                 }
-                "/join" => {
+                "/get" => {
                     if v.len() == 2 {
                         self.framed.write(codec::ToyRequest::Get(v[1].to_owned()));
                     } else {
-                        println!("!!! room name is required");
+                        println!("!!! key is required");
+                    }
+                }
+                "/put" => {
+                    if v.len() == 3 {
+                        self.framed
+                            .write(codec::ToyRequest::Put((v[1].to_owned(), v[2].to_owned())));
+                    } else {
+                        println!("!!! key and value is required");
+                    }
+                }
+                "/delete" => {
+                    if v.len() == 2 {
+                        self.framed
+                            .write(codec::ToyRequest::Delete(v[1].to_owned()));
+                    } else {
+                        println!("!!! key is required");
                     }
                 }
                 _ => println!("!!! unknown command"),
             }
         } else {
-            self.framed.write(codec::ToyRequest::Message(m.to_owned()));
+            println!("try `/get key`, `/put key value`, `/delete key` and `/scan`")
         }
     }
 }
@@ -122,18 +134,14 @@ impl Handler<ClientCommand> for ToyClient {
 impl StreamHandler<codec::ToyResponse, io::Error> for ToyClient {
     fn handle(&mut self, msg: codec::ToyResponse, _: &mut Context<Self>) {
         match msg {
-            codec::ToyResponse::Message(ref msg) => {
-                println!("message: {}", msg);
+            codec::ToyResponse::Value(ref msg) => {
+                println!("value: {}", msg);
             }
-            codec::ToyResponse::Joined(ref msg) => {
-                println!("!!! joined: {}", msg);
+            codec::ToyResponse::Saved(ref msg) => {
+                println!("saved: {}", msg);
             }
-            codec::ToyResponse::Rooms(rooms) => {
-                println!("\n!!! Available rooms:");
-                for room in rooms {
-                    println!("{}", room);
-                }
-                println!();
+            codec::ToyResponse::Deleted(ref msg) => {
+                println!("deleted: {}", msg);
             }
             _ => (),
         }
