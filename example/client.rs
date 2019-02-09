@@ -12,7 +12,7 @@ use tokio_tcp::TcpStream;
 use toy_kv::transport::codec;
 
 fn main() {
-    println!("Running chat client");
+    println!("Running toy client");
 
     actix::System::run(|| {
         // Connect to server
@@ -20,13 +20,13 @@ fn main() {
         Arbiter::spawn(
             TcpStream::connect(&addr)
                 .and_then(|stream| {
-                    let addr = ChatClient::create(|ctx| {
+                    let addr = ToyClient::create(|ctx| {
                         let (r, w) = stream.split();
-                        ctx.add_stream(FramedRead::new(r, codec::ClientChatCodec));
-                        ChatClient {
+                        ctx.add_stream(FramedRead::new(r, codec::ToyClientCodec));
+                        ToyClient {
                             framed: actix::io::FramedWrite::new(
                                 w,
-                                codec::ClientChatCodec,
+                                codec::ToyClientCodec,
                                 ctx,
                             ),
                         }
@@ -53,14 +53,14 @@ fn main() {
     });
 }
 
-struct ChatClient {
-    framed: actix::io::FramedWrite<WriteHalf<TcpStream>, codec::ClientChatCodec>,
+struct ToyClient {
+    framed: actix::io::FramedWrite<WriteHalf<TcpStream>, codec::ToyClientCodec>,
 }
 
 #[derive(Message)]
 struct ClientCommand(String);
 
-impl Actor for ChatClient {
+impl Actor for ToyClient {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
@@ -78,19 +78,19 @@ impl Actor for ChatClient {
     }
 }
 
-impl ChatClient {
+impl ToyClient {
     fn hb(&self, ctx: &mut Context<Self>) {
         ctx.run_later(Duration::new(1, 0), |act, ctx| {
-            act.framed.write(codec::ChatRequest::Ping);
+            act.framed.write(codec::ToyRequest::Ping);
             act.hb(ctx);
         });
     }
 }
 
-impl actix::io::WriteHandler<io::Error> for ChatClient {}
+impl actix::io::WriteHandler<io::Error> for ToyClient {}
 
 /// Handle stdin commands
-impl Handler<ClientCommand> for ChatClient {
+impl Handler<ClientCommand> for ToyClient {
     type Result = ();
 
     fn handle(&mut self, msg: ClientCommand, _: &mut Context<Self>) {
@@ -101,11 +101,11 @@ impl Handler<ClientCommand> for ChatClient {
             let v: Vec<&str> = m.splitn(2, ' ').collect();
             match v[0] {
                 "/list" => {
-                    self.framed.write(codec::ChatRequest::List);
+                    self.framed.write(codec::ToyRequest::Scan);
                 }
                 "/join" => {
                     if v.len() == 2 {
-                        self.framed.write(codec::ChatRequest::Join(v[1].to_owned()));
+                        self.framed.write(codec::ToyRequest::Get(v[1].to_owned()));
                     } else {
                         println!("!!! room name is required");
                     }
@@ -113,22 +113,22 @@ impl Handler<ClientCommand> for ChatClient {
                 _ => println!("!!! unknown command"),
             }
         } else {
-            self.framed.write(codec::ChatRequest::Message(m.to_owned()));
+            self.framed.write(codec::ToyRequest::Message(m.to_owned()));
         }
     }
 }
 
 /// Server communication
-impl StreamHandler<codec::ChatResponse, io::Error> for ChatClient {
-    fn handle(&mut self, msg: codec::ChatResponse, _: &mut Context<Self>) {
+impl StreamHandler<codec::ToyResponse, io::Error> for ToyClient {
+    fn handle(&mut self, msg: codec::ToyResponse, _: &mut Context<Self>) {
         match msg {
-            codec::ChatResponse::Message(ref msg) => {
+            codec::ToyResponse::Message(ref msg) => {
                 println!("message: {}", msg);
             }
-            codec::ChatResponse::Joined(ref msg) => {
+            codec::ToyResponse::Joined(ref msg) => {
                 println!("!!! joined: {}", msg);
             }
-            codec::ChatResponse::Rooms(rooms) => {
+            codec::ToyResponse::Rooms(rooms) => {
                 println!("\n!!! Available rooms:");
                 for room in rooms {
                     println!("{}", room);

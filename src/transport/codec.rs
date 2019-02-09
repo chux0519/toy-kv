@@ -9,11 +9,11 @@ use actix::prelude::*;
 
 /// Client request
 #[derive(Serialize, Deserialize, Debug, Message)]
-pub enum ChatRequest {
-    /// List rooms
-    List,
-    /// Join rooms
-    Join(String),
+pub enum ToyRequest {
+    /// Scan kv pairs
+    Scan,
+    /// Get the value of key
+    Get(String),
     /// Send message
     Message(String),
     /// Ping
@@ -22,10 +22,10 @@ pub enum ChatRequest {
 
 /// Server response
 #[derive(Serialize, Deserialize, Debug, Message)]
-pub enum ChatResponse {
+pub enum ToyResponse {
     Ping,
 
-    /// List of rooms
+    /// Scan of rooms
     Rooms(Vec<String>),
 
     /// Joined
@@ -36,10 +36,10 @@ pub enum ChatResponse {
 }
 
 /// Codec for Client -> Server transport
-pub struct ChatCodec;
+pub struct ToyServerCodec;
 
-impl Decoder for ChatCodec {
-    type Item = ChatRequest;
+impl Decoder for ToyServerCodec {
+    type Item = ToyRequest;
     type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -53,19 +53,19 @@ impl Decoder for ChatCodec {
         if src.len() >= size + 2 {
             src.split_to(2);
             let buf = src.split_to(size);
-            Ok(Some(json::from_slice::<ChatRequest>(&buf)?))
+            Ok(Some(json::from_slice::<ToyRequest>(&buf)?))
         } else {
             Ok(None)
         }
     }
 }
 
-impl Encoder for ChatCodec {
-    type Item = ChatResponse;
+impl Encoder for ToyServerCodec {
+    type Item = ToyResponse;
     type Error = io::Error;
 
     fn encode(
-        &mut self, msg: ChatResponse, dst: &mut BytesMut,
+        &mut self, msg: ToyResponse, dst: &mut BytesMut,
     ) -> Result<(), Self::Error> {
         let msg = json::to_string(&msg).unwrap();
         let msg_ref: &[u8] = msg.as_ref();
@@ -79,10 +79,10 @@ impl Encoder for ChatCodec {
 }
 
 /// Codec for Server -> Client transport
-pub struct ClientChatCodec;
+pub struct ToyClientCodec;
 
-impl Decoder for ClientChatCodec {
-    type Item = ChatResponse;
+impl Decoder for ToyClientCodec {
+    type Item = ToyResponse;
     type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -96,19 +96,19 @@ impl Decoder for ClientChatCodec {
         if src.len() >= size + 2 {
             src.split_to(2);
             let buf = src.split_to(size);
-            Ok(Some(json::from_slice::<ChatResponse>(&buf)?))
+            Ok(Some(json::from_slice::<ToyResponse>(&buf)?))
         } else {
             Ok(None)
         }
     }
 }
 
-impl Encoder for ClientChatCodec {
-    type Item = ChatRequest;
+impl Encoder for ToyClientCodec {
+    type Item = ToyRequest;
     type Error = io::Error;
 
     fn encode(
-        &mut self, msg: ChatRequest, dst: &mut BytesMut,
+        &mut self, msg: ToyRequest, dst: &mut BytesMut,
     ) -> Result<(), Self::Error> {
         let msg = json::to_string(&msg).unwrap();
         let msg_ref: &[u8] = msg.as_ref();

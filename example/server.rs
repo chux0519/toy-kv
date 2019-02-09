@@ -7,14 +7,14 @@ use tokio_codec::FramedRead;
 use tokio_io::AsyncRead;
 use tokio_tcp::{TcpListener, TcpStream};
 
-use toy_kv::transport::codec::ChatCodec;
-use toy_kv::transport::server::ChatServer;
-use toy_kv::transport::session::ChatSession;
+use toy_kv::transport::codec::ToyServerCodec;
+use toy_kv::transport::server::ToyServer;
+use toy_kv::transport::session::ToySession;
 
 /// Define tcp server that will accept incoming tcp connection and create
-/// chat actors.
+/// toy actors.
 struct Server {
-    chat: Addr<ChatServer>,
+    toy: Addr<ToyServer>,
 }
 
 /// Make actor from `Server`
@@ -33,27 +33,27 @@ impl Handler<TcpConnect> for Server {
     type Result = ();
 
     fn handle(&mut self, msg: TcpConnect, _: &mut Context<Self>) {
-        // For each incoming connection we create `ChatSession` actor
-        // with out chat server address.
-        let server = self.chat.clone();
-        ChatSession::create(move |ctx| {
+        // For each incoming connection we create `ToySession` actor
+        // with out toy server address.
+        let server = self.toy.clone();
+        ToySession::create(move |ctx| {
             let (r, w) = msg.0.split();
-            ChatSession::add_stream(FramedRead::new(r, ChatCodec), ctx);
-            ChatSession::new(server, actix::io::FramedWrite::new(w, ChatCodec, ctx))
+            ToySession::add_stream(FramedRead::new(r, ToyServerCodec), ctx);
+            ToySession::new(server, actix::io::FramedWrite::new(w, ToyServerCodec, ctx))
         });
     }
 }
 
 fn main() {
     actix::System::run(|| {
-        // Start chat server actor
-        let server = ChatServer::default().start();
+        // Start toy server actor
+        let server = ToyServer::default().start();
 
         // Create server listener
         let addr = net::SocketAddr::from_str("127.0.0.1:12345").unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
-        // Our chat server `Server` is an actor, first we need to start it
+        // Our toy server `Server` is an actor, first we need to start it
         // and then add stream on incoming tcp connections to it.
         // TcpListener::incoming() returns stream of the (TcpStream, net::SocketAddr)
         // items So to be able to handle this events `Server` actor has to implement
@@ -63,9 +63,9 @@ fn main() {
                 let addr = st.peer_addr().unwrap();
                 TcpConnect(st, addr)
             }));
-            Server { chat: server }
+            Server { toy: server }
         });
 
-        println!("Running chat server on 127.0.0.1:12345");
+        println!("Running toy server on 127.0.0.1:12345");
     });
 }

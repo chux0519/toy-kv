@@ -1,41 +1,41 @@
 //! `ClientSession` is an actor, it manages peer tcp connection and
-//! proxies commands from peer to `ChatServer`.
+//! proxies commands from peer to `ToyServer`.
 use actix::prelude::*;
 use std::io;
 use std::time::{Duration, Instant};
 use tokio_io::io::WriteHalf;
 use tokio_tcp::TcpStream;
 
-use super::codec::{ChatCodec, ChatRequest, ChatResponse};
-use super::server::{self, ChatServer};
+use super::codec::{ToyServerCodec, ToyRequest, ToyResponse};
+use super::server::{self, ToyServer};
 
-/// Chat server sends this messages to session
+/// Toy server sends this messages to session
 #[derive(Message)]
 pub struct Message(pub String);
 
-/// `ChatSession` actor is responsible for tcp peer communications.
-pub struct ChatSession {
+/// `ToySession` actor is responsible for tcp peer communications.
+pub struct ToySession {
     /// unique session id
     id: usize,
-    /// this is address of chat server
-    addr: Addr<ChatServer>,
+    /// this is address of toy server
+    addr: Addr<ToyServer>,
     /// Client must send ping at least once per 10 seconds, otherwise we drop
     /// connection.
     hb: Instant,
     /// joined room
     room: String,
     /// Framed wrapper
-    framed: actix::io::FramedWrite<WriteHalf<TcpStream>, ChatCodec>,
+    framed: actix::io::FramedWrite<WriteHalf<TcpStream>, ToyServerCodec>,
 }
 
-impl Actor for ChatSession {
+impl Actor for ToySession {
     type Context = actix::Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
         // we'll start heartbeat process on session start.
         self.hb(ctx);
 
-        // register self in chat server. `AsyncContext::wait` register
+        // register self in toy server. `AsyncContext::wait` register
         // future within context, but context waits until this future resolves
         // before processing any other events.
         self.addr
@@ -46,7 +46,7 @@ impl Actor for ChatSession {
             .then(|res, act, ctx| {
                 match res {
                     Ok(res) => act.id = res,
-                    // something is wrong with chat server
+                    // something is wrong with toy server
                     _ => ctx.stop(),
                 }
                 actix::fut::ok(())
@@ -55,27 +55,27 @@ impl Actor for ChatSession {
     }
 
     fn stopping(&mut self, _: &mut Self::Context) -> Running {
-        // notify chat server
+        // notify toy server
         self.addr.do_send(server::Disconnect { id: self.id });
         Running::Stop
     }
 }
 
-impl actix::io::WriteHandler<io::Error> for ChatSession {}
+impl actix::io::WriteHandler<io::Error> for ToySession {}
 
 /// To use `Framed` with an actor, we have to implement `StreamHandler` trait
-impl StreamHandler<ChatRequest, io::Error> for ChatSession {
+impl StreamHandler<ToyRequest, io::Error> for ToySession {
     /// This is main event loop for client requests
-    fn handle(&mut self, msg: ChatRequest, ctx: &mut Self::Context) {
+    fn handle(&mut self, msg: ToyRequest, ctx: &mut Self::Context) {
         match msg {
-            ChatRequest::List => {
-                // Send ListRooms message to chat server and wait for response
-                println!("List rooms");
+            ToyRequest::Scan => {
+                // Send ListRooms message to toy server and wait for response
+                println!("Scan rooms");
                 self.addr.send(server::ListRooms)
                     .into_actor(self)     // <- create actor compatible future
                     .then(|res, act, _| {
                         match res {
-                            Ok(rooms) => act.framed.write(ChatResponse::Rooms(rooms)),
+                            Ok(rooms) => act.framed.write(ToyResponse::Rooms(rooms)),
                             _ => println!("Something is wrong"),
                         }
                         actix::fut::ok(())
@@ -83,17 +83,17 @@ impl StreamHandler<ChatRequest, io::Error> for ChatSession {
                 // .wait(ctx) pauses all events in context,
                 // so actor wont receive any new messages until it get list of rooms back
             }
-            ChatRequest::Join(name) => {
-                println!("Join to room: {}", name);
+            ToyRequest::Get(name) => {
+                println!("Get to room: {}", name);
                 self.room = name.clone();
-                self.addr.do_send(server::Join {
+                self.addr.do_send(server::Get {
                     id: self.id,
                     name: name.clone(),
                 });
-                self.framed.write(ChatResponse::Joined(name));
+                self.framed.write(ToyResponse::Joined(name));
             }
-            ChatRequest::Message(message) => {
-                // send message to chat server
+            ToyRequest::Message(message) => {
+                // send message to toy server
                 println!("Peer message: {}", message);
                 self.addr.do_send(server::Message {
                     id: self.id,
@@ -102,29 +102,29 @@ impl StreamHandler<ChatRequest, io::Error> for ChatSession {
                 })
             }
             // we update heartbeat time on ping from peer
-            ChatRequest::Ping => self.hb = Instant::now(),
+            ToyRequest::Ping => self.hb = Instant::now(),
         }
     }
 }
 
-/// Handler for Message, chat server sends this message, we just send string to
+/// Handler for Message, toy server sends this message, we just send string to
 /// peer
-impl Handler<Message> for ChatSession {
+impl Handler<Message> for ToySession {
     type Result = ();
 
     fn handle(&mut self, msg: Message, _: &mut Self::Context) {
         // send message to peer
-        self.framed.write(ChatResponse::Message(msg.0));
+        self.framed.write(ToyResponse::Message(msg.0));
     }
 }
 
 /// Helper methods
-impl ChatSession {
+impl ToySession {
     pub fn new(
-        addr: Addr<ChatServer>,
-        framed: actix::io::FramedWrite<WriteHalf<TcpStream>, ChatCodec>,
-    ) -> ChatSession {
-        ChatSession {
+        addr: Addr<ToyServer>,
+        framed: actix::io::FramedWrite<WriteHalf<TcpStream>, ToyServerCodec>,
+    ) -> ToySession {
+        ToySession {
             addr,
             framed,
             id: 0,
@@ -143,14 +143,14 @@ impl ChatSession {
                 // heartbeat timed out
                 println!("Client heartbeat failed, disconnecting!");
 
-                // notify chat server
+                // notify toy server
                 act.addr.do_send(server::Disconnect { id: act.id });
 
                 // stop actor
                 ctx.stop();
             }
 
-            act.framed.write(ChatResponse::Ping);
+            act.framed.write(ToyResponse::Ping);
             act.hb(ctx);
         });
     }
