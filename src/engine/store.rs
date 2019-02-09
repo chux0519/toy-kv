@@ -67,6 +67,16 @@ impl Store {
         Store::init(&key_file, &value_file, &buffer_file, value_pos)
     }
 
+    fn ensure_size(&self) -> Result<(u64, u64, u64), error::Error>{
+        let key_pos = util::ensure_size(&self.key_file, KEY_FILE_SIZE as u64, MKEY_SIZE as u64)?;
+        util::ensure_size(&self.value_file, VALUE_FILE_SIZE as u64, VALUE_SIZE as u64)?;
+        let buffer_pos = util::ensure_size(&self.buffer_file, BUFFER_SIZE as u64, VALUE_SIZE as u64)?;
+
+        let value_pos =
+            (key_pos / MKEY_SIZE as u64 - buffer_pos / VALUE_SIZE as u64) * VALUE_SIZE as u64;
+        Ok((key_pos, buffer_pos, value_pos))
+    }
+
     fn init<P: AsRef<Path>>(
         key_file: P,
         value_file: P,
@@ -83,7 +93,7 @@ impl Store {
         // Build index
         let key_file_end = util::get_file_size(&key_file)?;
         let index = build_index(&key_file, 0, key_file_end)?;
-        let ventry = index.len() % MAX_KV_PAIR;
+        let ventry = index.len();
 
         // Init keys(mmap)
         let mmap_key = get_rw_mmap_fd(
@@ -129,9 +139,7 @@ impl Store {
             let file_pos = self.vm.flush();
             // Check if need more space
             if file_pos % VALUE_FILE_SIZE as u64 == 0 {
-                let new_store = Store::new(&self.key_file, &self.value_file, &self.buffer_file)?;
-                self.vm = new_store.vm;
-                self.km = new_store.km;
+                self.ensure_size()?;
             }
         }
 
@@ -296,7 +304,7 @@ impl KeyManager {
         let mut windex = self.index.write().unwrap();
         let mut wkeys = self.keys.write().unwrap();
 
-        let ventry = self.ventry;
+        let ventry = windex.len();
         let new_key = Key {
             inner: key.clone(),
             ventry,
@@ -313,12 +321,12 @@ impl KeyManager {
         }
 
         // Append to keys (mmap)
-        let offset = ventry * MKEY_SIZE;
+        let offset = ventry % MAX_KV_PAIR * MKEY_SIZE;
 
         for pos in offset..offset + MKEY_SIZE {
             wkeys[pos] = kbytes[pos - offset];
         }
 
-        self.ventry += 1;
+        self.ventry = windex.len();
     }
 }
