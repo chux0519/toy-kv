@@ -30,6 +30,10 @@ pub struct Disconnect {
     pub id: usize,
 }
 
+/// Session is disconnected
+#[derive(Message)]
+pub struct Scan(pub usize);
+
 /// Get value of key
 pub struct Get {
     /// Client id
@@ -147,5 +151,21 @@ impl Handler<Delete> for ToyServer {
     fn handle(&mut self, msg: Delete, _: &mut Context<Self>) {
         let Delete { id, key } = msg;
         self.store.delete(key.parse().unwrap()).unwrap();
+    }
+}
+
+/// Delete value of key
+impl Handler<Scan> for ToyServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: Scan, _: &mut Context<Self>) {
+        let id = msg.0;
+        let addr = self.sessions.get(&id).unwrap();
+        for (k, v) in self.store.scan() {
+            addr.do_send(session::Next {
+                key: k.to_string(),
+                value: v.to_string(),
+            });
+        }
     }
 }

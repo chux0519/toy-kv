@@ -9,9 +9,12 @@ use tokio_tcp::TcpStream;
 use super::codec::{ToyRequest, ToyResponse, ToyServerCodec};
 use super::server::{self, ToyServer};
 
-/// Toy server sends this messages to session
+/// Toy server sends this kv pair to session
 #[derive(Message)]
-pub struct Message(pub String);
+pub struct Next {
+    pub key: String,
+    pub value: String,
+}
 
 /// `ToySession` actor is responsible for tcp peer communications.
 pub struct ToySession {
@@ -101,13 +104,13 @@ impl StreamHandler<ToyRequest, io::Error> for ToySession {
                         actix::fut::ok(())
                     })
                     .wait(ctx)
-            },
+            }
             ToyRequest::Delete(k) => {
                 println!("try delete: {}", k);
                 self.addr
                     .send(server::Delete {
                         id: self.id,
-                        key: k.clone()
+                        key: k.clone(),
                     })
                     .into_actor(self) // <- create actor compatible future
                     .then(move |res, act, _| {
@@ -123,7 +126,9 @@ impl StreamHandler<ToyRequest, io::Error> for ToySession {
 
             // we update heartbeat time on ping from peer
             ToyRequest::Ping => self.hb = Instant::now(),
-            _ => {}
+            ToyRequest::Scan => {
+                self.addr.do_send(server::Scan(self.id));
+            }
         }
     }
 }
@@ -162,5 +167,13 @@ impl ToySession {
             act.framed.write(ToyResponse::Ping);
             act.hb(ctx);
         });
+    }
+}
+
+impl Handler<Next> for ToySession {
+    type Result = ();
+    fn handle(&mut self, msg: Next, _: &mut Context<Self>) {
+        let Next { key, value } = msg;
+        self.framed.write(ToyResponse::Next((key, value)));
     }
 }

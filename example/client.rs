@@ -143,6 +143,9 @@ impl StreamHandler<codec::ToyResponse, io::Error> for ToyClient {
             codec::ToyResponse::Deleted(ref msg) => {
                 println!("deleted: {}", msg);
             }
+            codec::ToyResponse::Next(ref msg) => {
+                println!("({}, {})", msg.0, msg.1);
+            }
             _ => (),
         }
     }

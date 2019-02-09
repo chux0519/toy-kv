@@ -32,6 +32,8 @@ pub enum ToyResponse {
     Saved(String),
     /// Deleted key
     Deleted(String),
+    /// Scan
+    Next((String, String)),
 }
 
 /// Codec for Client -> Server transport
