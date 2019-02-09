@@ -114,34 +114,25 @@ mod store_integration_test {
         assert!(res.is_none());
     }
 
-    use time::PreciseTime;
     #[test]
     fn store_to_grow() {
         let (k, v, b) = tmpfile("test_store_to_grow");
         {
             let mut db = store::Store::new(&k, &v, &b).unwrap();
-            let start = PreciseTime::now();
-            for i in 0..65536 {
+            for i in 0..65537 {
                 db.put(
                     format!("k{}", i).parse().unwrap(),
                     kv::Value::Valid(Box::new(format!("v{}", i).parse().unwrap())),
                 )
                 .unwrap();
             }
-            let end = PreciseTime::now();
-            println!("{} seconds for put", start.to(end));
         }
 
         {
             // Restore from file
             let mut db = store::Store::new(&k, &v, &b).unwrap();
-            let start = PreciseTime::now();
-            for i in 0..65536 {
-                let v = db.get(format!("k{}", i).parse().unwrap()).unwrap().unwrap();
-                assert_eq!(v.to_string(), format!("v{}", i));
-            }
-            let end = PreciseTime::now();
-            println!("{} seconds for get", start.to(end));
+            let v = db.get("k65536".parse().unwrap()).unwrap().unwrap();
+            assert_eq!(v.to_string(), "v65536");
         }
     }
 }

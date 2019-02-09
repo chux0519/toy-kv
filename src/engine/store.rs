@@ -67,13 +67,21 @@ impl Store {
         Store::init(&key_file, &value_file, &buffer_file, value_pos)
     }
 
-    fn ensure_size(&self) -> Result<(u64, u64, u64), error::Error>{
+    fn ensure_size(&mut self) -> Result<(u64, u64, u64), error::Error> {
         let key_pos = util::ensure_size(&self.key_file, KEY_FILE_SIZE as u64, MKEY_SIZE as u64)?;
         util::ensure_size(&self.value_file, VALUE_FILE_SIZE as u64, VALUE_SIZE as u64)?;
-        let buffer_pos = util::ensure_size(&self.buffer_file, BUFFER_SIZE as u64, VALUE_SIZE as u64)?;
+        let buffer_pos =
+            util::ensure_size(&self.buffer_file, BUFFER_SIZE as u64, VALUE_SIZE as u64)?;
 
         let value_pos =
             (key_pos / MKEY_SIZE as u64 - buffer_pos / VALUE_SIZE as u64) * VALUE_SIZE as u64;
+        
+        let mmap_key = get_rw_mmap_fd(
+            &self.key_file,
+            KEY_FILE_SIZE,
+            key_pos,
+        );
+        self.km.keys = RwLock::new(mmap_key);
         Ok((key_pos, buffer_pos, value_pos))
     }
 

@@ -125,7 +125,7 @@ pub fn build_index<P: AsRef<Path>>(path: P, start: u64, end: u64) -> Result<Vec<
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut v = Vec::new();
-    for pos in (start..end).step_by(KEY_FILE_SIZE + VALUE_FILE_SIZE) {
+    for pos in (start..end).step_by(KEY_FILE_SIZE) {
         // For each chunk
         let mut mkey = vec![0; KEY_FILE_SIZE];
         reader.seek(SeekFrom::Start(pos as u64))?;
