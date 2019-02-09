@@ -70,9 +70,6 @@ pub fn find_insert_point(index: &[Key], key: &InnerKey) -> (bool, usize) {
             }
             right = mid - 1;
         } else {
-            if mid == index.len() - 1 {
-                return (true, mid + 1);
-            }
             while mid < index.len() - 1 {
                 if &index[mid + 1].inner == key {
                     mid += 1;
@@ -80,7 +77,7 @@ pub fn find_insert_point(index: &[Key], key: &InnerKey) -> (bool, usize) {
                     break;
                 }
             }
-            return (true, mid);
+            return (true, mid + 1);
         }
     }
     (false, mid)
@@ -275,7 +272,7 @@ mod util_tests {
                 (
                     vec!["key001", "key001", "key002", "key003"],
                     "key001",
-                    (true, 1),
+                    (true, 2),
                 ),
                 (
                     vec!["key001", "key001", "key002", "key003"],
