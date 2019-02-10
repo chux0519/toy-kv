@@ -133,10 +133,7 @@ mod store_integration_test {
             let mut db = store::Store::new(&k, &v, &b).unwrap();
             // let v = db.get("k65536".parse().unwrap()).unwrap().unwrap();
             for i in 99_999..100_000 {
-                let v = db
-                .get(format!("k{}", i).parse().unwrap())
-                .unwrap()
-                .unwrap();
+                let v = db.get(format!("k{}", i).parse().unwrap()).unwrap().unwrap();
                 assert_eq!(v.to_string(), format!("v{}", i))
             }
             // assert_eq!(v.to_string(), "v65536");
