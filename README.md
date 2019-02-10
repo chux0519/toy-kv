@@ -40,6 +40,8 @@ Also, you can run following on your local machine.
 
 Now, play with the client.
 
+![demo](imgs/demo.png)
+
 ## Design
 
 Store kv pair with three separate files: keys, values, and buffer.
