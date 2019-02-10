@@ -4,14 +4,22 @@ use std::string::ToString;
 
 use super::error::Error;
 
+/// key: 8 bytes
 pub const KEY_SIZE: usize = 8;
-pub const MKEY_SIZE: usize = 12; // 8 bytes for key, 4 bytes for the index of values
-
-pub const MAX_KV_PAIR: usize = 65536; // 4 bytes
-pub const VALUE_SIZE: usize = 256;
-pub const VALUE_FILE_SIZE: usize = MAX_KV_PAIR * VALUE_SIZE;
+/// 8 bytes for key, 4 bytes for the index of values
+pub const MKEY_SIZE: usize = 12;
+// each chunk max size
+pub const MAX_KV_PAIR: usize = 65536;
+/// size of keys which would be mem mapped
 pub const KEY_FILE_SIZE: usize = MAX_KV_PAIR * MKEY_SIZE;
-pub const BUFFER_SIZE: usize = 16 * 1024 * 1024; // 16mb buffer size
+
+/// value: 256 bytes
+pub const VALUE_SIZE: usize = 256;
+/// size of each value block
+pub const VALUE_FILE_SIZE: usize = MAX_KV_PAIR * VALUE_SIZE;
+
+/// 16mb buffer size (mem mapped)
+pub const BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
 /// Keys are only allowed in 8 bytes
 /// While Values for 256 bytes each

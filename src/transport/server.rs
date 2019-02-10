@@ -11,7 +11,7 @@ use super::super::engine::kv;
 use super::super::engine::store::Store;
 use super::open_db_from;
 use super::session;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// New toy session is created
 pub struct Connect {
@@ -80,6 +80,15 @@ pub struct ToyServer {
 impl Default for ToyServer {
     fn default() -> ToyServer {
         let db_path: PathBuf = "toydb".parse().unwrap();
+        ToyServer {
+            sessions: HashMap::new(),
+            store: open_db_from(&db_path).unwrap(),
+        }
+    }
+}
+
+impl ToyServer {
+    pub fn new<P: AsRef<Path>>(db_path: P) -> ToyServer {
         ToyServer {
             sessions: HashMap::new(),
             store: open_db_from(&db_path).unwrap(),

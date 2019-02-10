@@ -9,7 +9,8 @@ use std::sync::RwLock;
 use memmap::MmapMut;
 
 /// Seperating keys and values
-/// both of them are insert only vector
+/// Managing keys and index via km
+/// Managing values via vm
 pub struct Store {
     km: KeyManager,
     vm: ValueManager,
@@ -57,11 +58,13 @@ impl Store {
         value_file: P,
         buffer_file: P,
     ) -> Result<Self, error::Error> {
+        // Make sure the DB files have enough space
         let key_pos = util::ensure_size(&key_file, KEY_FILE_SIZE as u64, MKEY_SIZE as u64)?;
         util::ensure_size(&value_file, VALUE_FILE_SIZE as u64, VALUE_SIZE as u64)?;
-        // FIXME: Corner case
+        // FIXME: Corner case should do a flush when the buffer is full here
         let buffer_pos = util::ensure_size(&buffer_file, BUFFER_SIZE as u64, VALUE_SIZE as u64)?;
 
+        // Compute the value file position
         let value_pos =
             (key_pos / MKEY_SIZE as u64 - buffer_pos / VALUE_SIZE as u64) * VALUE_SIZE as u64;
         Store::init(&key_file, &value_file, &buffer_file, value_pos)
@@ -75,12 +78,8 @@ impl Store {
 
         let value_pos =
             (key_pos / MKEY_SIZE as u64 - buffer_pos / VALUE_SIZE as u64) * VALUE_SIZE as u64;
-        
-        let mmap_key = get_rw_mmap_fd(
-            &self.key_file,
-            KEY_FILE_SIZE,
-            key_pos,
-        );
+
+        let mmap_key = get_rw_mmap_fd(&self.key_file, KEY_FILE_SIZE, key_pos);
         self.km.keys = RwLock::new(mmap_key);
         Ok((key_pos, buffer_pos, value_pos))
     }
@@ -204,8 +203,7 @@ impl ValueManager {
         // Do flush
         let mut wbuf = self.buf.write().unwrap();
         let wfile = self.file.write().unwrap();
-        // let mut data = Block4k { bytes: [0; 4096] };
-        // data.bytes.clone_from_slice(&wbuf);
+        // wbuf must be a multiple of the page size(512 kb)
         let bytes = wfile
             .pwrite(&wbuf, self.file_pos as u64)
             .expect("Failed to append to db file");
@@ -222,11 +220,14 @@ impl ValueManager {
         if offset as u64 > self.file_pos + BUFFER_SIZE as u64 {
             Err(error::Error::OutOfIndex)
         } else if offset as u64 >= self.file_pos {
+            // Value is in buffer
             let rbuf = self.buf.read().unwrap();
             offset -= self.file_pos as usize;
             let data = &rbuf[offset..offset + VALUE_SIZE];
             Ok(value_from_bytes(data).unwrap())
         } else {
+            // Value is in file
+            // try get value from page cache here
             let v = self.cache.try_get(offset as u64, VALUE_SIZE as u64);
             match v {
                 None => {
@@ -243,6 +244,7 @@ impl ValueManager {
     }
 }
 
+/// Read 4k block values as cache
 struct PageCache {
     cache: Block4k,
     start: u64,

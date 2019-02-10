@@ -1,3 +1,7 @@
+/// Open file with O_DIRECT
+/// Only support linux in theory
+/// Adapted according to
+/// https://github.com/jsgf/libaio-rust/blob/9b6c8d4b1eab31092f24cf6c1330d64b90ad0eaa/src/directio.rs#L1
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{FromRawFd, RawFd};
 

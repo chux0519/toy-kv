@@ -1,3 +1,4 @@
+use std::env;
 use std::str::FromStr;
 use std::time::Duration;
 use std::{io, net, process, thread};
@@ -12,11 +13,15 @@ use tokio_tcp::TcpStream;
 use toy_kv::transport::codec;
 
 fn main() {
-    println!("Running toy client");
-
     actix::System::run(|| {
         // Connect to server
-        let addr = net::SocketAddr::from_str("127.0.0.1:12345").unwrap();
+        let args: Vec<String> = env::args().collect();
+        if args.len() < 2 {
+            eprintln!("Server address required!\nUsage: client [url:port]");
+            std::process::exit(0);
+        }
+        let addr = &args[1];
+        let addr = net::SocketAddr::from_str(addr).unwrap();
         Arbiter::spawn(
             TcpStream::connect(&addr)
                 .and_then(|stream| {
@@ -38,7 +43,12 @@ fn main() {
 
                         addr.do_send(ClientCommand(cmd));
                     });
-
+                    println!("Running toy client");
+                    println!("Usage: $CMD [KEY?] [VALUE?], ie");
+                    println!("\t Get [key]");
+                    println!("\t Put [key] [value]");
+                    println!("\t Delete [key]");
+                    println!("\t Scan");
                     futures::future::ok(())
                 })
                 .map_err(|e| {
@@ -91,41 +101,35 @@ impl Handler<ClientCommand> for ToyClient {
 
     fn handle(&mut self, msg: ClientCommand, _: &mut Context<Self>) {
         let m = msg.0.trim();
+        let v: Vec<&str> = m.split(' ').collect();
+        let cmd = v[0];
 
-        // we check for /sss type of messages
-        if m.starts_with('/') {
-            let v: Vec<&str> = m.split(' ').collect();
-            match v[0] {
-                "/scan" => {
-                    self.framed.write(codec::ToyRequest::Scan);
-                }
-                "/get" => {
-                    if v.len() == 2 {
-                        self.framed.write(codec::ToyRequest::Get(v[1].to_owned()));
-                    } else {
-                        println!("!!! key is required");
-                    }
-                }
-                "/put" => {
-                    if v.len() == 3 {
-                        self.framed
-                            .write(codec::ToyRequest::Put((v[1].to_owned(), v[2].to_owned())));
-                    } else {
-                        println!("!!! key and value is required");
-                    }
-                }
-                "/delete" => {
-                    if v.len() == 2 {
-                        self.framed
-                            .write(codec::ToyRequest::Delete(v[1].to_owned()));
-                    } else {
-                        println!("!!! key is required");
-                    }
-                }
-                _ => println!("!!! unknown command"),
+        if cmd == "Get" {
+            if v.len() == 2 {
+                self.framed.write(codec::ToyRequest::Get(v[1].to_owned()));
+            } else {
+                eprintln!("Wrong format, try `Get [key]`");
             }
+        } else if cmd == "Put" {
+            let v: Vec<&str> = m.split(' ').collect();
+            if v.len() == 3 {
+                self.framed
+                    .write(codec::ToyRequest::Put((v[1].to_owned(), v[2].to_owned())));
+            } else {
+                eprintln!("Wrong format, try `Put [key] [value]`");
+            }
+        } else if cmd == "Delete" {
+            let v: Vec<&str> = m.split(' ').collect();
+            if v.len() == 2 {
+                self.framed
+                    .write(codec::ToyRequest::Delete(v[1].to_owned()));
+            } else {
+                eprintln!("Wrong format, try `Delete [key]`");
+            }
+        } else if m == "Scan" {
+            self.framed.write(codec::ToyRequest::Scan);
         } else {
-            println!("try `/get key`, `/put key value`, `/delete key` and `/scan`")
+            eprintln!("Unknown command!")
         }
     }
 }

@@ -1,5 +1,6 @@
+use std::env;
 use std::net;
-use std::str::FromStr;
+use std::path::PathBuf;
 
 use actix::prelude::*;
 use futures::Stream;
@@ -44,13 +45,28 @@ impl Handler<TcpConnect> for Server {
     }
 }
 
+/// Environment
+static DB_DIR: &str = "DB_DIR";
+static SERVER_PORT: &str = "SERVER_PORT";
+
 fn main() {
-    actix::System::run(|| {
+    let db_dir: PathBuf = env::var(DB_DIR)
+        .unwrap_or_else(|_| "toydb".to_owned())
+        .parse()
+        .unwrap();
+    let port = env::var(SERVER_PORT).unwrap_or_else(|_| "8888".to_owned());
+
+    actix::System::run(move || {
         // Start toy server actor
-        let server = ToyServer::default().start();
+        let server = ToyServer::new(db_dir).start();
 
         // Create server listener
-        let addr = net::SocketAddr::from_str("127.0.0.1:12345").unwrap();
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+        let addr = SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+            port.parse::<u16>().unwrap(),
+        );
+        // let addr = net::SocketAddr::from_str("0.0.0.0:12345").unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
         // Our toy server `Server` is an actor, first we need to start it
@@ -66,6 +82,6 @@ fn main() {
             Server { toy: server }
         });
 
-        println!("Running toy server on 127.0.0.1:12345");
+        println!("Running toy server on {}", &addr);
     });
 }

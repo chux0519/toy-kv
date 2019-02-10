@@ -119,7 +119,7 @@ mod store_integration_test {
         let (k, v, b) = tmpfile("test_store_to_grow");
         {
             let mut db = store::Store::new(&k, &v, &b).unwrap();
-            for i in 0..65537 {
+            for i in 0..100_000 {
                 db.put(
                     format!("k{}", i).parse().unwrap(),
                     kv::Value::Valid(Box::new(format!("v{}", i).parse().unwrap())),
@@ -131,8 +131,15 @@ mod store_integration_test {
         {
             // Restore from file
             let mut db = store::Store::new(&k, &v, &b).unwrap();
-            let v = db.get("k65536".parse().unwrap()).unwrap().unwrap();
-            assert_eq!(v.to_string(), "v65536");
+            // let v = db.get("k65536".parse().unwrap()).unwrap().unwrap();
+            for i in 99_999..100_000 {
+                let v = db
+                .get(format!("k{}", i).parse().unwrap())
+                .unwrap()
+                .unwrap();
+                assert_eq!(v.to_string(), format!("v{}", i))
+            }
+            // assert_eq!(v.to_string(), "v65536");
         }
     }
 }

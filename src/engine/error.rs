@@ -3,15 +3,17 @@ use std::fmt::{self, Debug, Display};
 use std::io;
 
 pub enum Error {
-    // For str to key
+    // For converting string to key
     ContentExceed,
-    // For init
+    // For alignment check
     WrongAlignment,
-    // For reading values
+    // For checking bound when reading values
     OutOfIndex,
     // For build value from [u8]
     InvalidValueSize,
+    // For checking cache size when trying to read value
     CacheTooSmall,
+    // For io error
     IoError(io::Error),
 }
 

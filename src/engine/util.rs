@@ -209,6 +209,8 @@ pub fn ensure_size<P: AsRef<Path>>(path: P, chunk_size: u64, item_size: u64) -> 
     }
 }
 
+/// Find the end position of content
+/// When data chunk is all 0 in continuous `item_size`, that's the end position
 fn find_last_pos<R: Read + Seek>(
     reader: &mut R,
     len: u64,
@@ -229,6 +231,7 @@ fn find_last_pos<R: Read + Seek>(
     unreachable!();
 }
 
+/// Simply returns the file size
 pub fn get_file_size<P: AsRef<Path>>(path: P) -> Result<u64, Error> {
     let metadata = fs::metadata(&path)?;
     Ok(metadata.len())
