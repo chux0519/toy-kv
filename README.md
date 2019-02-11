@@ -6,7 +6,7 @@ PS: Do not use this in any production environment.
 
 ## Features
 
-- SSD Friendly
+- SSD Friendly(No huge write amplification)
 - Data Persistence
 - Easy to Integrate (you can change the transport layer easily)
 
@@ -73,3 +73,9 @@ When the store does `Put` action, it first write data to the buffer, when the bu
 - Single thread usage
 - Only support  fixed length kv pair, (8 bytes, 256 bytes)
 - Only support at most 0xffffffff(1<<32) kv pairs (using 4 bytes to index value)
+
+## TODOS
+
+- [ ] More reasonable benchmark (YCSB support maybe)
+- [ ] Multi-thread usage and multi-shard storage
+- [ ] Garbage collection
