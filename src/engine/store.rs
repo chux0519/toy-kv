@@ -41,7 +41,7 @@ impl<'a> Iterator for StoreIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let rindex = self.store.km.index.read().unwrap();
-        while self.index < rindex.len() && self.index < self.end as usize {
+        while self.index < rindex.len() && self.index <= self.end as usize {
             let key = &rindex[self.index];
             if self.index + 1 < rindex.len() && key.inner == rindex[self.index + 1].inner {
                 self.index += 1;
