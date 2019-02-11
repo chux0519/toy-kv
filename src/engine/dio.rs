@@ -16,7 +16,7 @@ pub struct DirectFile {
     alignment: usize,
 }
 
-const O_DIRECT: i32 = 0x4000; // For Linux
+const O_DIRECT: i32 = 0x40000; // For Linux
 
 #[inline]
 fn retry<F: Fn() -> isize>(f: F) -> isize {
