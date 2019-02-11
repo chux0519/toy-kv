@@ -66,9 +66,7 @@ impl DirectFile {
             ),
         };
         let path = path.as_ref().as_os_str().as_bytes();
-        match retry(|| unsafe {
-            libc::open(path.as_ptr() as *const i8, flags, u32::from(mode)) as isize
-        }) {
+        match retry(|| unsafe { libc::open(path.as_ptr() as *const i8, flags, mode) as isize }) {
             -1 => Err(io::Error::last_os_error()),
             fd => Ok(DirectFile {
                 fd: fd as i32,
