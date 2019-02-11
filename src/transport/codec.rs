@@ -11,7 +11,7 @@ use tokio_io::codec::{Decoder, Encoder};
 #[derive(Serialize, Deserialize, Debug, Message)]
 pub enum ToyRequest {
     /// Scan kv pairs
-    Scan,
+    Scan((u32, u32)),
     /// Get the value of key
     Get(String),
     /// Put kv pair

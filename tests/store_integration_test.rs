@@ -104,7 +104,7 @@ mod store_integration_test {
             )
             .unwrap();
         }
-        let mut iter = db.scan();
+        let mut iter = db.scan(0, 6);
         for i in 0..=5 {
             let (k, v) = iter.next().unwrap();
             assert_eq!(k.to_string(), format!("key0{}", i));

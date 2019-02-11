@@ -48,7 +48,7 @@ fn main() {
                     println!("\t Get [key]");
                     println!("\t Put [key] [value]");
                     println!("\t Delete [key]");
-                    println!("\t Scan");
+                    println!("\t Scan [start] [end]");
                     futures::future::ok(())
                 })
                 .map_err(|e| {
@@ -126,8 +126,26 @@ impl Handler<ClientCommand> for ToyClient {
             } else {
                 eprintln!("Wrong format, try `Delete [key]`");
             }
-        } else if m == "Scan" {
-            self.framed.write(codec::ToyRequest::Scan);
+        } else if cmd == "Scan" {
+            if v.len() == 3 {
+                let start = match v[1].parse::<u32>() {
+                    Ok(n) => n,
+                    _ => {
+                        eprintln!("invalid input {}, set to 0", v[1]);
+                        0
+                    }
+                };
+                let end = match v[2].parse::<u32>() {
+                    Ok(n) => n,
+                    _ => {
+                        eprintln!("invalid input {}, set to 0", v[2]);
+                        0
+                    }
+                };
+                self.framed.write(codec::ToyRequest::Scan((start, end)));
+            } else {
+                eprintln!("Wrong format, try `Scan start end`");
+            }
         } else {
             eprintln!("Unknown command!")
         }

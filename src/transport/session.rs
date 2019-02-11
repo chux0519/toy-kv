@@ -133,8 +133,12 @@ impl StreamHandler<ToyRequest, io::Error> for ToySession {
 
             // we update heartbeat time on ping from peer
             ToyRequest::Ping => self.hb = Instant::now(),
-            ToyRequest::Scan => {
-                self.addr.do_send(server::Scan(self.id));
+            ToyRequest::Scan((start, end)) => {
+                self.addr.do_send(server::Scan {
+                    id: self.id,
+                    start,
+                    end,
+                });
             }
         }
     }

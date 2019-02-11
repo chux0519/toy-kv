@@ -33,7 +33,11 @@ pub struct Disconnect {
 
 /// Session is disconnected
 #[derive(Message)]
-pub struct Scan(pub usize);
+pub struct Scan {
+    pub id: usize,
+    pub start: u32,
+    pub end: u32,
+}
 
 /// Get value of key
 pub struct Get {
@@ -178,9 +182,9 @@ impl Handler<Scan> for ToyServer {
     type Result = ();
 
     fn handle(&mut self, msg: Scan, _: &mut Context<Self>) {
-        let id = msg.0;
+        let id = msg.id;
         let addr = &self.sessions[&id];
-        for (k, v) in self.store.scan() {
+        for (k, v) in self.store.scan(msg.start, msg.end) {
             addr.do_send(session::Next {
                 key: k.to_string(),
                 value: v.to_string(),

@@ -23,11 +23,16 @@ pub struct Store {
 pub struct StoreIter<'a> {
     store: &'a mut Store,
     index: usize,
+    end: u32,
 }
 
 impl<'a> StoreIter<'a> {
-    pub fn new(store: &'a mut Store) -> Self {
-        StoreIter { store, index: 0 }
+    pub fn new(store: &'a mut Store, start: u32, end: u32) -> Self {
+        StoreIter {
+            store,
+            index: start as usize,
+            end,
+        }
     }
 }
 
@@ -36,7 +41,7 @@ impl<'a> Iterator for StoreIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let rindex = self.store.km.index.read().unwrap();
-        while self.index < rindex.len() {
+        while self.index < rindex.len() && self.index < self.end as usize {
             let key = &rindex[self.index];
             if self.index + 1 < rindex.len() && key.inner == rindex[self.index + 1].inner {
                 self.index += 1;
@@ -157,8 +162,8 @@ impl Store {
         self.put(key, Value::Invalid)
     }
 
-    pub fn scan(&mut self) -> StoreIter {
-        StoreIter::new(self)
+    pub fn scan(&mut self, start: u32, end: u32) -> StoreIter {
+        StoreIter::new(self, start, end)
     }
 }
 
