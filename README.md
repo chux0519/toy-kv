@@ -21,10 +21,10 @@ It is suggested start with a simple C/S demo.
 Direct IO may only support in Linux based OS, so using docker to start a server. (It also works on OSX Mojave, but no guarantee)
 
 > mkdir -p ./toydb
-> 
-> docker run -it -e SERVER_PORT=8888 -e DB_DIR=/toydb -p 8888:8888 chux0519/toy_server
+>
+> docker run -it -e SERVER_PORT=8888 -e DB_DIR=/toydb -p 8888:8888 -v "$(pwd)"/toydb:/toydb chux0519/toy_server
 
-Above will start a local kv server at port 8888.
+Above will start a local kv server at port 8888, and mount `./toydb` to container.
 
 Also, you can run following on your local machine.
 
